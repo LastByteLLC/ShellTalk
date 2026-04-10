@@ -169,11 +169,61 @@ public final class TemplateStore: Sendable {
       "image files": "find_images", "photo files": "find_images",
       "execute permission": "chmod_executable",
       "executable permission": "chmod_executable",
-      "environment variable": "export_var",
-      "env var": "export_var",
+      "environment variable": "echo_var",
+      "env var": "echo_var",
       "working directory": "pwd",
       "network interfaces": "ifconfig_show",
       "ip address": "ifconfig_show",
+      // Git phrases
+      "pull request": "gh_pr_create",
+      "squash commits": "git_squash",
+      "revert commit": "git_revert",
+      "discard changes": "git_restore",
+      "undo changes": "git_restore",
+      "uncommitted changes": "git_restore",
+      // Docker phrases
+      "docker volumes": "docker_volume_ls",
+      "container logs": "docker_logs",
+      "unused images": "docker_image_prune",
+      "all containers": "docker_stop_all",
+      // System phrases
+      "cron jobs": "crontab_list",
+      "cron job": "crontab_edit",
+      "random password": "random_password",
+      "network connections": "netstat_connections",
+      "open connections": "netstat_connections",
+      // File finding phrases
+      "hidden files": "ls_files",
+      "containing word": "grep_search",
+      "files containing": "grep_search",
+      "blank lines": "sed_delete_lines",
+      "email addresses": "grep_search",
+      // Disk space
+      "disk space": "du_summary",
+      "takes up space": "du_summary",
+      "using space": "du_summary",
+      // Containers
+      "running containers": "docker_ps",
+      "stop containers": "docker_stop_all",
+      "stop all": "docker_stop_all",
+      // Directory operations
+      "directory called": "mkdir_dir",
+      "folder called": "mkdir_dir",
+      // SSL
+      "ssl certificate": "openssl_check",
+      "ssl cert": "openssl_check",
+      // Version checking
+      "version of": "command_help",
+      // Brew
+      "brew packages": "brew_update",
+      "update packages": "brew_update",
+      "update brew": "brew_update",
+      // Clipboard
+      "to clipboard": "pbcopy",
+      "ssh key": "ssh_keygen",
+      // Shell identity
+      "which shell": "echo_var",
+      "my shell": "echo_var",
     ]
     for (phrase, templateId) in conceptPhrases {
       phrases[phrase] = templateId

@@ -98,9 +98,14 @@ public struct SlotExtractor: Sendable {
       return true
     }
 
-    // Short words without path separators are unlikely to be real paths
+    // Very short generic words without path separators are unlikely to be real paths
+    // But allow common directory names like "build", "src", "dist", "tmp"
+    let commonDirNames: Set<String> = [
+      "build", "src", "dist", "tmp", "out", "bin", "lib", "docs",
+      "test", "tests", "vendor", "node_modules", "target", "output",
+    ]
     if type == .path, !lowered.contains("/"), !lowered.contains("."),
-       lowered.count <= 10 {
+       lowered.count <= 4, !commonDirNames.contains(lowered) {
       return true
     }
 

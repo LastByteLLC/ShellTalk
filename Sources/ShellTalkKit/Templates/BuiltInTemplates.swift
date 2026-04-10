@@ -34,6 +34,8 @@ public enum BuiltInTemplates {
           "what is in this folder", "list my files",
           "show folder contents", "show what files",
           "files in directory", "whats in this folder",
+          "show hidden files", "show all files including hidden",
+          "only directories", "show directories",
         ],
         command: "ls {LS_COLOR} -la {PATH}",
         slots: [
@@ -236,6 +238,21 @@ public enum BuiltInTemplates {
         slots: [
           "SOURCE": SlotDefinition(type: .path, extractPattern: #"(?:link|symlink)\s+(?:to\s+)?(\S+)"#),
           "DEST": SlotDefinition(type: .path, extractPattern: #"(?:as|at|named)\s+(\S+)"#),
+        ]
+      ),
+      CommandTemplate(
+        id: "find_and_delete",
+        intents: [
+          "find and delete", "remove all folders named",
+          "delete all node_modules", "remove all DS_Store",
+          "recursively remove", "find and remove",
+          "delete folders matching", "remove directories named",
+        ],
+        command: "find {PATH} -name '{PATTERN}' -type d -exec rm -rf {} +",
+        slots: [
+          "PATH": SlotDefinition(type: .path, defaultValue: "."),
+          "PATTERN": SlotDefinition(type: .glob,
+            extractPattern: #"(?:named|all|remove|delete)\s+(\S+)"#),
         ]
       ),
       CommandTemplate(
@@ -592,6 +609,84 @@ public enum BuiltInTemplates {
             extractPattern: #"(?:to|reset)\s+([a-f0-9]{6,40}|HEAD~?\d*)"#),
         ]
       ),
+      CommandTemplate(
+        id: "git_restore",
+        intents: [
+          "git restore", "discard changes", "undo changes",
+          "undo all changes", "undo uncommitted changes",
+          "discard all modifications", "restore working tree",
+          "revert uncommitted changes", "checkout all files",
+        ],
+        command: "git restore {PATH}",
+        slots: [
+          "PATH": SlotDefinition(type: .path, defaultValue: ".",
+            extractPattern: #"(?:restore|discard|undo)\s+(?:changes\s+(?:in|to)\s+)?(\S+)"#),
+        ]
+      ),
+      CommandTemplate(
+        id: "git_revert",
+        intents: [
+          "git revert", "revert commit", "revert last commit",
+          "revert the last merge", "undo a commit",
+          "reverse a commit", "revert last change",
+        ],
+        command: "git revert {COMMIT}",
+        slots: [
+          "COMMIT": SlotDefinition(type: .string, defaultValue: "HEAD",
+            extractPattern: #"(?:revert|undo)\s+(?:the\s+)?(?:last\s+)?(\S+)"#),
+        ]
+      ),
+      CommandTemplate(
+        id: "git_squash",
+        intents: [
+          "squash commits", "squash last commits",
+          "git squash", "combine commits", "squash my commits",
+          "interactive rebase", "git rebase interactive",
+        ],
+        command: "git rebase -i HEAD~{COUNT}",
+        slots: [
+          "COUNT": SlotDefinition(type: .number, defaultValue: "3",
+            extractPattern: #"(?:last|squash)\s+(\d+)"#),
+        ]
+      ),
+      CommandTemplate(
+        id: "git_log_since",
+        intents: [
+          "commits since yesterday", "git log since",
+          "show what I committed yesterday", "recent commits today",
+          "commits from today", "what did I commit",
+          "show yesterday's commits", "my commits today",
+        ],
+        command: "git log --oneline --since='{SINCE}' --author=\"$(git config user.name)\"",
+        slots: [
+          "SINCE": SlotDefinition(type: .string, defaultValue: "yesterday",
+            extractPattern: #"(?:since|from|yesterday|today)\s*(\S*)"#),
+        ]
+      ),
+      CommandTemplate(
+        id: "git_tag_sorted",
+        intents: [
+          "list tags", "show all tags", "git tags sorted",
+          "tags sorted by date", "show tags by date",
+          "latest tags", "all git tags",
+        ],
+        command: "git tag --sort=-creatordate"
+      ),
+      CommandTemplate(
+        id: "gh_pr_create",
+        intents: [
+          "create pull request", "open pull request",
+          "create pr", "gh pr create", "new pull request",
+          "open a pr", "submit pull request",
+          "make a pull request", "create github pr",
+        ],
+        command: "gh pr create --title '{TITLE}' --body '{BODY}'",
+        slots: [
+          "TITLE": SlotDefinition(type: .string, defaultValue: "",
+            extractPattern: #"(?:title|titled)\s+['\"]?(.+?)['\"]?$"#),
+          "BODY": SlotDefinition(type: .string, defaultValue: ""),
+        ]
+      ),
     ]
   )
 
@@ -611,11 +706,14 @@ public enum BuiltInTemplates {
           "look for text", "find in files",
           "recursively search for", "search recursively",
           "search for word", "search entire project",
+          "find files containing", "extract lines matching",
+          "extract pattern from", "pull lines matching",
+          "find lines with", "files containing word",
         ],
         command: "grep -rn '{PATTERN}' {PATH}",
         slots: [
           "PATTERN": SlotDefinition(type: .pattern,
-            extractPattern: #"(?:search|grep|find|for|of)\s+['\"]?(\S+)['\"]?"#),
+            extractPattern: #"(?:containing|for|of|matching)\s+(?:the\s+)?(?:word\s+)?['\"]?(\S+)['\"]?|(?:search|grep)\s+['\"]?(\S+)['\"]?"#),
           "PATH": SlotDefinition(type: .path, defaultValue: ".",
             extractPattern: #"(?:in|within|under)\s+(\S+)"#),
         ]
@@ -1027,6 +1125,77 @@ public enum BuiltInTemplates {
         negativeKeywords: ["process", "nginx", "apache", "node", "service", "pid", "kill"]
       ),
       CommandTemplate(
+        id: "docker_exec",
+        intents: [
+          "docker exec", "exec into container", "shell into container",
+          "enter container", "connect to container shell",
+          "bash into container", "attach to container",
+        ],
+        command: "docker exec -it {CONTAINER} {SHELL}",
+        slots: [
+          "CONTAINER": SlotDefinition(type: .string,
+            extractPattern: #"(?:exec|into|container)\s+(\S+)"#),
+          "SHELL": SlotDefinition(type: .string, defaultValue: "/bin/sh"),
+        ]
+      ),
+      CommandTemplate(
+        id: "docker_volume_ls",
+        intents: [
+          "docker volume ls", "list docker volumes", "show docker volumes",
+          "docker volumes", "what volumes exist",
+        ],
+        command: "docker volume ls"
+      ),
+      CommandTemplate(
+        id: "docker_image_prune",
+        intents: [
+          "docker image prune", "remove unused docker images",
+          "clean up docker images", "prune docker images",
+          "delete unused images", "docker cleanup",
+          "docker system prune",
+        ],
+        command: "docker image prune -a {FLAGS}",
+        slots: [
+          "FLAGS": SlotDefinition(type: .string, defaultValue: ""),
+        ]
+      ),
+      CommandTemplate(
+        id: "docker_stop_all",
+        intents: [
+          "stop all containers", "stop all running containers",
+          "docker stop all", "kill all containers",
+        ],
+        command: "docker stop $(docker ps -q)"
+      ),
+      CommandTemplate(
+        id: "docker_logs",
+        intents: [
+          "docker logs", "show container logs", "container log output",
+          "logs for container", "docker container logs",
+          "show docker logs", "tail container logs",
+        ],
+        command: "docker logs {FLAGS} {CONTAINER}",
+        slots: [
+          "FLAGS": SlotDefinition(type: .string, defaultValue: "--tail 100"),
+          "CONTAINER": SlotDefinition(type: .string,
+            extractPattern: #"(?:logs?|container|for)\s+(?:the\s+)?(\S+)"#),
+        ]
+      ),
+      CommandTemplate(
+        id: "python_http_server",
+        intents: [
+          "start a local http server", "python http server",
+          "simple http server", "serve files locally",
+          "start web server on port", "local file server",
+        ],
+        command: "python3 -m http.server {PORT}",
+        slots: [
+          "PORT": SlotDefinition(type: .port, defaultValue: "8000",
+            extractPattern: #"(?:port)\s+(\d+)|(\d{4,5})"#),
+        ],
+        negativeKeywords: ["flask", "django", "node", "npm", "express"]
+      ),
+      CommandTemplate(
         id: "kubectl_get",
         intents: [
           "kubectl get pods", "list pods", "show kubernetes resources",
@@ -1197,7 +1366,8 @@ public enum BuiltInTemplates {
           "FLAGS": SlotDefinition(type: .string, defaultValue: ""),
           "QUERY": SlotDefinition(type: .string,
             extractPattern: #"(?:search|find|mdfind)\s+(?:for\s+)?['\"]?(.+?)['\"]?$"#),
-        ]
+        ],
+        negativeKeywords: ["extract", "email", "addresses", "containing", "grep", "pattern", "regex"]
       ),
       CommandTemplate(
         id: "mdls_metadata",
@@ -1332,7 +1502,7 @@ public enum BuiltInTemplates {
         command: "curl -s -X POST -H 'Content-Type: application/json' -d '{BODY}' '{URL}'",
         slots: [
           "URL": SlotDefinition(type: .url,
-            extractPattern: #"(?:to)\s+(https?://\S+)|(https?://\S+)"#),
+            extractPattern: #"(?:to)\s+(https?://\S+|localhost:\d+|\S+:\d{2,5})|(https?://\S+|localhost:\d+)"#),
           "BODY": SlotDefinition(type: .string,
             extractPattern: #"(?:body|data|json)\s+['\"]?(\{.+\})['\"]?"#),
         ],
@@ -1594,7 +1764,9 @@ public enum BuiltInTemplates {
         intents: [
           "directory sizes", "du sorted", "biggest directories",
           "what's using disk space", "largest directories",
-          "space usage by directory",
+          "space usage by directory", "what takes up the most space",
+          "disk usage sorted by size", "what is using disk space",
+          "biggest folders", "largest folders",
         ],
         command: "du -sh {PATH}/* | sort -rh | head -n {COUNT}",
         slots: [
@@ -1764,6 +1936,20 @@ public enum BuiltInTemplates {
         discriminators: ["flags", "options", "arguments", "allowed"]
       ),
       CommandTemplate(
+        id: "command_version",
+        intents: [
+          "what version of", "check version", "version of",
+          "which version", "show version number",
+          "what version do I have", "version installed",
+        ],
+        command: "{COMMAND} --version",
+        slots: [
+          "COMMAND": SlotDefinition(type: .string,
+            extractPattern: #"(?:version\s+of|of)\s+(\w+)"#),
+        ],
+        discriminators: ["version"]
+      ),
+      CommandTemplate(
         id: "ifconfig_show",
         intents: [
           "ifconfig", "network interfaces", "show network interfaces",
@@ -1794,6 +1980,145 @@ public enum BuiltInTemplates {
           "how much memory is being used",
         ],
         command: "vm_stat"
+      ),
+      CommandTemplate(
+        id: "crontab_list",
+        intents: [
+          "crontab", "list cron jobs", "show cron jobs",
+          "crontab -l", "my cron jobs", "scheduled tasks",
+          "what cron jobs do I have",
+        ],
+        command: "crontab -l"
+      ),
+      CommandTemplate(
+        id: "crontab_edit",
+        intents: [
+          "edit crontab", "create cron job", "add cron job",
+          "crontab -e", "schedule a job", "create scheduled task",
+          "set up cron", "new cron job",
+        ],
+        command: "crontab -e"
+      ),
+      CommandTemplate(
+        id: "random_password",
+        intents: [
+          "generate password", "random password", "create password",
+          "generate random string", "random token",
+          "generate secret", "secure password",
+        ],
+        command: "openssl rand -base64 {LENGTH}",
+        slots: [
+          "LENGTH": SlotDefinition(type: .number, defaultValue: "32",
+            extractPattern: #"(\d+)\s*(?:char|byte|length)"#),
+        ]
+      ),
+      CommandTemplate(
+        id: "md5_hash",
+        intents: [
+          "md5 hash", "calculate md5", "md5sum",
+          "md5 checksum", "checksum of file",
+          "sha256 hash", "file hash", "compute hash",
+        ],
+        command: "{MD5_CMD} {FILE}",
+        slots: [
+          "FILE": SlotDefinition(type: .path,
+            extractPattern: #"(?:of|for|hash)\s+(\S+)"#),
+        ]
+      ),
+      CommandTemplate(
+        id: "cal_show",
+        intents: [
+          "calendar", "cal", "show calendar",
+          "this month calendar", "cal this month",
+          "show this month",
+        ],
+        command: "cal {FLAGS}",
+        slots: [
+          "FLAGS": SlotDefinition(type: .string, defaultValue: ""),
+        ]
+      ),
+      CommandTemplate(
+        id: "list_users",
+        intents: [
+          "list users", "show all users", "who are the users",
+          "all users on system", "list system users",
+          "show user accounts",
+        ],
+        command: "cut -d: -f1 /etc/passwd | sort"
+      ),
+      CommandTemplate(
+        id: "usermod_group",
+        intents: [
+          "add to group", "usermod group", "add user to group",
+          "join group", "add myself to group",
+          "add to docker group",
+        ],
+        command: "sudo usermod -aG {GROUP} {USER}",
+        slots: [
+          "GROUP": SlotDefinition(type: .string,
+            extractPattern: #"(?:group)\s+(\S+)|(?:to)\s+(\S+)"#),
+          "USER": SlotDefinition(type: .string, defaultValue: "$(whoami)",
+            extractPattern: #"(?:user)\s+(\S+)"#),
+        ]
+      ),
+      CommandTemplate(
+        id: "echo_var",
+        intents: [
+          "echo variable", "show variable", "print variable",
+          "value of variable", "show env var",
+          "print environment variable", "echo env",
+          "what is the value of",
+        ],
+        command: "echo ${VAR}",
+        slots: [
+          "VAR": SlotDefinition(type: .string,
+            extractPattern: #"(?:variable|var|of)\s+(\w+)"#),
+        ]
+      ),
+      CommandTemplate(
+        id: "who_logged_in",
+        intents: [
+          "who is logged in", "who", "logged in users",
+          "who else is on this machine", "show logged in users",
+          "active users", "w command",
+        ],
+        command: "who"
+      ),
+      CommandTemplate(
+        id: "openssl_check",
+        intents: [
+          "check ssl certificate", "verify ssl", "test ssl",
+          "ssl certificate info", "check https certificate",
+          "openssl check", "certificate details",
+          "inspect ssl cert", "check tls",
+        ],
+        command: "openssl s_client -connect {HOST}:443 -brief <<< ''",
+        slots: [
+          "HOST": SlotDefinition(type: .string,
+            extractPattern: #"(?:for|of|on)\s+(\S+)"#),
+        ]
+      ),
+      CommandTemplate(
+        id: "nmap_scan",
+        intents: [
+          "nmap scan", "scan network", "scan local network",
+          "discover devices on network", "port scan",
+          "find devices on network", "network discovery",
+        ],
+        command: "nmap -sn {NETWORK}",
+        slots: [
+          "NETWORK": SlotDefinition(type: .string, defaultValue: "192.168.1.0/24",
+            extractPattern: #"(\d+\.\d+\.\d+\.\d+/\d+)"#),
+        ]
+      ),
+      CommandTemplate(
+        id: "netstat_connections",
+        intents: [
+          "show network connections", "open connections",
+          "all network connections", "active connections",
+          "netstat", "show open sockets",
+        ],
+        command: "netstat -an | head -50"
       ),
     ]
   )
@@ -1869,7 +2194,8 @@ public enum BuiltInTemplates {
         intents: [
           "npm install", "install npm package", "add npm dependency",
           "npm add", "install node module",
-          "npm i package",
+          "npm i package", "install from package.json",
+          "install node dependencies", "install javascript dependencies",
         ],
         command: "npm install {PACKAGE}",
         slots: [
@@ -1962,10 +2288,10 @@ public enum BuiltInTemplates {
         ],
         command: "tar -czf {ARCHIVE} {PATH}",
         slots: [
-          "ARCHIVE": SlotDefinition(type: .path,
+          "ARCHIVE": SlotDefinition(type: .path, defaultValue: "archive.tar.gz",
             extractPattern: #"(?:as|to|into|named?)\s+(\S+\.tar(?:\.\w+)?)"#),
           "PATH": SlotDefinition(type: .path, defaultValue: ".",
-            extractPattern: #"(?:archive|compress|tar)\s+(\S+)"#),
+            extractPattern: #"(?:of|archive|compress)\s+(?:the\s+)?(\S+)"#),
         ]
       ),
       CommandTemplate(

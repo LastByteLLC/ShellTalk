@@ -66,18 +66,33 @@ public final class IntentMatcher: Sendable {
       return result
     }
 
-    // Fast path 2: Phrase match — compound concepts like "TXT record", "png files"
-    if let result = tryPhraseMatch(normalized) {
-      return result
+    // Run BM25 (entity-aware) — always runs now
+    let bm25Result = bm25Match(query, entities: entities)
+
+    // Fast path 2: Phrase match — compound concepts
+    // BM25 overrides phrase match only if it scores > 5.0 AND picked a different template
+    if let phraseResult = tryPhraseMatch(normalized) {
+      if let bm25 = bm25Result {
+        let bm25Score = bm25.categoryScore * 0.3 + bm25.templateScore * 0.7
+        if bm25Score > 5.0 && bm25.templateId != phraseResult.templateId {
+          return bm25
+        }
+      }
+      return phraseResult
     }
 
-    // Fast path 3: Command-prefix match
-    if let result = tryCommandPrefixMatch(query: query, normalized: normalized) {
-      return result
+    // Fast path 3: Command-prefix match — only wins if BM25 didn't score higher
+    if let prefixResult = tryCommandPrefixMatch(query: query, normalized: normalized) {
+      if let bm25 = bm25Result {
+        let bm25Score = bm25.categoryScore * 0.3 + bm25.templateScore * 0.7
+        if bm25Score > 3.0 && bm25.templateId != prefixResult.templateId {
+          return bm25
+        }
+      }
+      return prefixResult
     }
 
-    // Standard path: Two-level BM25 matching with entity-aware boosting
-    return bm25Match(query, entities: entities)
+    return bm25Result
   }
 
   // MARK: - Fast Path: Meta-Question Detection
@@ -183,9 +198,27 @@ public final class IntentMatcher: Sendable {
   /// When the first token of the query is a known shell command with few candidate
   /// templates (≤ 4), restrict search to those templates using discriminator logic.
   /// For commands with many templates (like "git"), fall through to BM25.
+  /// Words that are common English verbs AND CLI command names.
+  /// When these appear as the first word of a 3+ word query, skip command-prefix
+  /// and let BM25 handle it — the user is speaking naturally, not invoking the CLI tool.
+  private static let naturalLanguageVerbs: Set<String> = [
+    "which", "find", "list", "show", "make", "open", "remove", "format",
+    "set", "check", "clear", "test", "run", "start", "stop", "create",
+    "watch", "export", "sort", "head", "tail", "top", "kill", "host",
+    "touch", "file", "date", "diff", "split", "join", "cut", "tr",
+    "look", "mount", "read", "write", "link", "cal",
+  ]
+
   private func tryCommandPrefixMatch(query: String, normalized: String) -> IntentMatchResult? {
     let words = normalized.split(separator: " ").map(String.init)
     guard words.count >= 2 else { return nil }
+
+    // Skip command-prefix for natural-language verbs in longer queries.
+    // "which python3" (2 words) → command-prefix OK
+    // "which file was modified recently" (5 words) → skip, use BM25
+    if words.count >= 3, Self.naturalLanguageVerbs.contains(words[0]) {
+      return nil
+    }
 
     // Try two-token prefix first (e.g., "aws s3", "git stash"), then single-token
     let prefixesToTry: [String]

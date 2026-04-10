@@ -202,6 +202,24 @@ public struct BM25: Sendable {
     // Compress synonyms
     "squash": ["compress"],
     "shrink": ["compress", "resize"],
+    // Extract/parse synonyms
+    "extract": ["search", "find", "get"],
+    "parse": ["read", "extract"],
+    // Generate/create synonyms
+    "generate": ["create"],
+    "produce": ["create", "generate"],
+    // Calculate/compute synonyms
+    "calculate": ["compute", "check"],
+    "compute": ["calculate", "check"],
+    // Nearest/closest synonyms
+    "nearest": ["find", "locate"],
+    "closest": ["find", "locate"],
+    // Prune/cleanup synonyms
+    "prune": ["clean", "remove", "delete"],
+    "cleanup": ["clean", "remove", "delete"],
+    // Enter/connect synonyms
+    "enter": ["exec", "connect", "shell"],
+    "attach": ["connect", "exec"],
   ]
 
   /// English stop words (compact set for CLI use).

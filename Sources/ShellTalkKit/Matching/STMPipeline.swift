@@ -110,14 +110,43 @@ public final class STMPipeline: Sendable {
     guard let match = matcher.match(query, entities: entities) else { return nil }
     timings.append(StageTiming(name: "match", elapsedMs: t0.elapsedMs()))
 
-    // Step 2: Extract slots (entity-aware)
+    // Step 2: Extract slots (entity-aware) + post-process
     t0 = PipelineTimer.now()
-    let slots = extractor.extract(
+    var slots = extractor.extract(
       from: query,
       slots: match.template.slots,
       entities: entities,
       profile: profile
     )
+    // Post-process: remove slot values that are just the command's own tokens
+    let cmdTokens = Set(
+      TemplateStore.extractCommandPrefix(match.template.command)
+        .lowercased().split(separator: " ").map(String.init)
+    )
+    for (name, value) in slots {
+      let lower = value.lowercased()
+      if cmdTokens.contains(lower) {
+        if let def = match.template.slots[name]?.defaultValue {
+          slots[name] = def
+        } else {
+          slots.removeValue(forKey: name)
+        }
+      }
+    }
+
+    // Post-process: normalize human words to flag values
+    let valueNormalization: [String: String] = [
+      "lines": "l", "line": "l",
+      "words": "w", "word": "w",
+      "characters": "c", "chars": "c", "char": "c",
+      "bytes": "c",
+      "code": "l",
+    ]
+    for (name, value) in slots {
+      if let normalized = valueNormalization[value.lowercased()] {
+        slots[name] = normalized
+      }
+    }
     timings.append(StageTiming(name: "extract", elapsedMs: t0.elapsedMs()))
 
     // Step 3: Resolve template
