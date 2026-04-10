@@ -65,8 +65,13 @@ public struct BM25: Sendable {
   }
 
   /// Search for documents matching the query. Returns results sorted by score descending.
-  public func search(_ query: String, topK: Int = 10, expandSynonyms: Bool = true) -> [BM25Result] {
-    let queryTokens = Self.tokenize(query, expandSynonyms: expandSynonyms)
+  public func search(
+    _ query: String, topK: Int = 10,
+    expandSynonyms: Bool = true,
+    suppressedDomains: Set<String> = []
+  ) -> [BM25Result] {
+    let queryTokens = Self.tokenize(
+      query, expandSynonyms: expandSynonyms, suppressedDomains: suppressedDomains)
     guard !queryTokens.isEmpty else { return [] }
 
     var results: [BM25Result] = []
@@ -108,7 +113,13 @@ public struct BM25: Sendable {
 
   /// Tokenize text into lowercase words, filtering stop words and short tokens.
   /// When `expandSynonyms` is true, informal verbs are expanded to canonical terms.
-  public static func tokenize(_ text: String, expandSynonyms: Bool = false) -> [String] {
+  /// `suppressedDomains` prevents synonyms from expanding into specific domains
+  /// (e.g., when a URL is detected, suppress git-related synonyms).
+  public static func tokenize(
+    _ text: String,
+    expandSynonyms: Bool = false,
+    suppressedDomains: Set<String> = []
+  ) -> [String] {
     let lowered = text.lowercased()
     // Split on non-alphanumeric characters
     var words = lowered.components(separatedBy: CharacterSet.alphanumerics.inverted)
@@ -120,7 +131,16 @@ public struct BM25: Sendable {
       for word in words {
         expanded.append(word)
         if let synonyms = Self.synonymTable[word] {
-          expanded.append(contentsOf: synonyms)
+          // Filter out synonyms from suppressed domains
+          let filtered = synonyms.filter { syn in
+            for domain in suppressedDomains {
+              if let domainWords = Self.domainWords[domain], domainWords.contains(syn) {
+                return false
+              }
+            }
+            return true
+          }
+          expanded.append(contentsOf: filtered)
         }
       }
       words = expanded
@@ -128,6 +148,13 @@ public struct BM25: Sendable {
 
     return words
   }
+
+  /// Words associated with specific domains — used to suppress synonym expansion
+  /// when entity detection indicates a different domain.
+  static let domainWords: [String: Set<String>] = [
+    "git": ["fetch", "pull", "push", "commit", "branch", "merge", "stash", "rebase"],
+    "network": ["download", "fetch", "request", "post", "get"],
+  ]
 
   /// Synonym expansion table: informal verbs → canonical terms.
   /// Applied to user queries (not template intents) to bridge vocabulary gaps.

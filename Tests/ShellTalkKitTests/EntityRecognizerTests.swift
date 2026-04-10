@@ -103,7 +103,7 @@ struct EntityRecognizerTests {
 
   @Test("Assigns target role for 'of X'")
   func targetRole() {
-    let entities = recognizer.recognize("take a screenshot of Firefox")
+    let entities = recognizer.recognize("show the size of ~/Documents/")
     let targets = entities.filter { $0.role == .target }
     #expect(!targets.isEmpty)
   }

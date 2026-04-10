@@ -6,6 +6,15 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
 jobs:
   macos:
     name: macOS (Swift ${{ matrix.swift }})
@@ -37,3 +46,41 @@ jobs:
         run: |
           swift run shelltalk "find swift files"
           swift run shelltalk --profile
+
+  wasm:
+    name: WebAssembly
+    runs-on: ubuntu-latest
+    container: swiftlang/swift:nightly-6.1-jammy
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Swift SDK for WASM
+        run: swift sdk install swift-6.3-RELEASE_wasm
+
+      - name: Build WASM binary
+        run: swift build --swift-sdk swift-6.3-RELEASE_wasm --product shelltalk-wasm -c release -Xswiftc -Osize
+
+      - name: Optimize WASM binary
+        run: |
+          apt-get update && apt-get install -y binaryen
+          wasm-opt -Oz --strip-debug --strip-producers \
+            .build/wasm32-unknown-wasip1/release/shelltalk-wasm.wasm \
+            -o Web/shelltalk.wasm
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: Web
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: [macos, linux, wasm]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

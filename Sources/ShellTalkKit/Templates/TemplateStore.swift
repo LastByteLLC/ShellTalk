@@ -131,7 +131,59 @@ public final class TemplateStore: Sendable {
       }
     }
     self.commandPrefixIndex = cmdPrefixes
+
+    // Build phrase index: extract 2-3 word phrases from intents
+    var phrases: [String: String] = [:]
+    for cat in categories {
+      for template in cat.templates {
+        for intent in template.intents {
+          let words = intent.lowercased().split(separator: " ").map(String.init)
+          // Extract all 2-word and 3-word n-grams
+          for n in 2...3 {
+            for i in 0...(max(0, words.count - n)) {
+              guard i + n <= words.count else { break }
+              let phrase = words[i..<(i + n)].joined(separator: " ")
+              // Only index phrases where at least one word is not a stop word
+              // Only index phrases where ALL words are content words (not stop words)
+              // and at least one word is specific (not a common verb)
+              let commonVerbs: Set<String> = ["list", "show", "find", "search", "create",
+                "delete", "remove", "run", "start", "stop", "check", "set", "add"]
+              let allContent = words[i..<(i + n)].allSatisfy { !BM25.stopWords.contains($0) }
+              let hasSpecific = words[i..<(i + n)].contains { !commonVerbs.contains($0) }
+              if allContent && hasSpecific && phrases[phrase] == nil {
+                phrases[phrase] = template.id
+              }
+            }
+          }
+        }
+      }
+    }
+    // Override with known concept phrases (these take priority over auto-generated)
+    let conceptPhrases: [String: String] = [
+      "txt record": "dig_lookup", "mx record": "dig_lookup",
+      "dns record": "dig_lookup", "a record": "dig_lookup",
+      "cname record": "dig_lookup",
+      "png files": "find_by_extension", "jpg files": "find_by_extension",
+      "json files": "find_by_extension", "yaml files": "find_by_extension",
+      "csv files": "find_by_extension", "log files": "find_by_extension",
+      "image files": "find_images", "photo files": "find_images",
+      "execute permission": "chmod_executable",
+      "executable permission": "chmod_executable",
+      "environment variable": "export_var",
+      "env var": "export_var",
+      "working directory": "pwd",
+      "network interfaces": "ifconfig_show",
+      "ip address": "ifconfig_show",
+    ]
+    for (phrase, templateId) in conceptPhrases {
+      phrases[phrase] = templateId
+    }
+    self.phraseIndex = phrases
   }
+
+  /// Phrase index: 2-3 word phrases from intents → template ID.
+  /// Matches compound concepts that BM25 bag-of-words misses.
+  public let phraseIndex: [String: String]
 
   /// Normalize a string for exact matching: lowercase, trim, collapse whitespace.
   static func normalize(_ text: String) -> String {
@@ -163,8 +215,10 @@ public final class TemplateStore: Sendable {
   }
 
   /// Find the best matching categories for a query.
-  public func matchCategories(_ query: String, topK: Int = 3) -> [BM25Result] {
-    categoryIndex.search(query, topK: topK)
+  public func matchCategories(
+    _ query: String, topK: Int = 3, suppressedDomains: Set<String> = []
+  ) -> [BM25Result] {
+    categoryIndex.search(query, topK: topK, suppressedDomains: suppressedDomains)
   }
 
   /// Find the best matching templates within a specific category.

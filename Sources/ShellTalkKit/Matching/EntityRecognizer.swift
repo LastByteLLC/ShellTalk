@@ -148,6 +148,9 @@ public struct EntityRecognizer: Sendable {
       // File paths with directory (./foo/bar, ~/Documents/x, /usr/bin/y)
       (#"(?:\.{1,2}|~)?/[^\s]+"#, .filePath, 0.85),
 
+      // Bare directory paths (Sources/, backup/, src/) — no leading ./ or ~/
+      (#"\b[a-zA-Z0-9_][a-zA-Z0-9_.-]*/(?=\s|$)"#, .directoryPath, 0.8),
+
       // Dotfiles (.DS_Store, .gitignore, .env)
       (#"(?<=\s|^)\.[a-zA-Z][a-zA-Z0-9_.-]+"#, .fileName, 0.85),
 

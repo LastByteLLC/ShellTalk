@@ -130,6 +130,9 @@ public struct PlatformSlots: Sendable {
         ? "osascript -e 'display notification \"{MSG}\" with title \"stm\"'"
         : "notify-send 'stm' '{MSG}'"
 
+    case "SVC_RESTART":
+      return profile.os == .macOS ? "brew services restart" : "sudo systemctl restart"
+
     default:
       return nil
     }

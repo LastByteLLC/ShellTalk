@@ -51,22 +51,109 @@ public final class IntentMatcher: Sendable {
 
   /// Match a user query to the best command template.
   /// Returns nil if no match exceeds the confidence threshold.
-  public func match(_ query: String) -> IntentMatchResult? {
+  public func match(_ query: String, entities: [RecognizedEntity] = []) -> IntentMatchResult? {
     let normalized = TemplateStore.normalize(query)
     guard !normalized.isEmpty else { return nil }
+
+    // Fast path 0: Meta-question detection
+    // "how do I use grep" → man grep, "what flags does curl allow" → curl --help
+    if let result = tryMetaQuestion(query: query, normalized: normalized) {
+      return result
+    }
 
     // Fast path 1: Exact match shortcut
     if let result = tryExactMatch(normalized) {
       return result
     }
 
-    // Fast path 2: Command-prefix match
+    // Fast path 2: Phrase match — compound concepts like "TXT record", "png files"
+    if let result = tryPhraseMatch(normalized) {
+      return result
+    }
+
+    // Fast path 3: Command-prefix match
     if let result = tryCommandPrefixMatch(query: query, normalized: normalized) {
       return result
     }
 
-    // Standard path: Two-level BM25 matching
-    return bm25Match(query)
+    // Standard path: Two-level BM25 matching with entity-aware boosting
+    return bm25Match(query, entities: entities)
+  }
+
+  // MARK: - Fast Path: Meta-Question Detection
+
+  /// Detect queries that are ABOUT a command rather than requesting a command.
+  /// Routes to man_page or command_help templates.
+  private func tryMetaQuestion(query: String, normalized: String) -> IntentMatchResult? {
+    let metaPatterns: [(pattern: String, templateId: String)] = [
+      // "how do I use grep" → man grep
+      (#"how (?:do i|to|can i) (?:use|run|do) (\w+)"#, "man_page"),
+      // "explain the find command" → man find
+      (#"explain (?:the )?(\w+)(?: command)?"#, "man_page"),
+      // "what does grep do" → man grep
+      (#"what does (\w+) do"#, "man_page"),
+      // "help with git" → man git
+      (#"help (?:with|on|about) (\w+)"#, "man_page"),
+      // "what flags does curl allow" → curl --help
+      (#"what (?:flags|options|arguments|args) (?:does|can|are) (\w+)"#, "command_help"),
+      // "show curl options" → curl --help
+      (#"show (\w+) (?:options|flags|help)"#, "command_help"),
+    ]
+
+    for (pattern, templateId) in metaPatterns {
+      guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+            let match = regex.firstMatch(in: normalized, range: NSRange(normalized.startIndex..., in: normalized)),
+            match.numberOfRanges > 1,
+            let cmdRange = Range(match.range(at: 1), in: normalized) else { continue }
+
+      let commandName = String(normalized[cmdRange])
+
+      // Verify the extracted word is actually a known command (not a random noun)
+      let isKnownCommand = store.commandPrefixIndex[commandName] != nil
+        || store.exactMatchIndex[commandName] != nil
+
+      guard isKnownCommand,
+            let (categoryId, template) = lookupTemplate(templateId) else { continue }
+
+      return IntentMatchResult(
+        categoryId: categoryId,
+        categoryScore: 1.0,
+        templateId: templateId,
+        templateScore: 1.0,
+        embeddingScore: nil,
+        template: template
+      )
+    }
+
+    return nil
+  }
+
+  // MARK: - Fast Path: Phrase Match
+
+  /// Check if the query contains a known 2-3 word phrase that maps to a template.
+  private func tryPhraseMatch(_ normalized: String) -> IntentMatchResult? {
+    let words = normalized.split(separator: " ").map(String.init)
+    guard words.count >= 2 else { return nil }
+
+    // Check 3-word phrases first (more specific), then 2-word
+    for n in [3, 2] {
+      for i in 0...(max(0, words.count - n)) {
+        guard i + n <= words.count else { break }
+        let phrase = words[i..<(i + n)].joined(separator: " ")
+        if let templateId = store.phraseIndex[phrase],
+           let (categoryId, template) = lookupTemplate(templateId) {
+          return IntentMatchResult(
+            categoryId: categoryId,
+            categoryScore: 1.0,
+            templateId: templateId,
+            templateScore: 0.95,
+            embeddingScore: nil,
+            template: template
+          )
+        }
+      }
+    }
+    return nil
   }
 
   // MARK: - Fast Path: Exact Match
@@ -225,10 +312,41 @@ public final class IntentMatcher: Sendable {
 
   // MARK: - Standard Path: BM25
 
-  private func bm25Match(_ query: String) -> IntentMatchResult? {
-    // Level 1: Category matching
-    let categoryResults = store.matchCategories(query, topK: config.topCategories)
+  private func bm25Match(_ query: String, entities: [RecognizedEntity] = []) -> IntentMatchResult? {
+    // Determine which synonym domains to suppress based on entities
+    var suppressedDomains = Set<String>()
+    let hasURL = entities.contains { $0.type == .url }
+    let hasIP = entities.contains { $0.type == .ipAddress }
+    let hasGitRef = entities.contains { $0.type == .branchName || $0.type == .gitRef }
+    if hasURL || hasIP {
+      suppressedDomains.insert("git")  // Don't expand "fetch" to git terms when URL present
+    }
+    if hasGitRef {
+      suppressedDomains.insert("network")  // Don't expand to network terms when git ref present
+    }
+
+    // Level 1: Category matching with entity-aware boosting
+    // Use scoped synonyms for category matching
+    var categoryResults = store.matchCategories(
+      query, topK: config.topCategories, suppressedDomains: suppressedDomains)
     guard !categoryResults.isEmpty else { return nil }
+
+    // Apply entity-based category boosts
+    let entityBoosts = computeEntityCategoryBoosts(entities)
+    if !entityBoosts.isEmpty {
+      categoryResults = categoryResults.map { result in
+        let boost = entityBoosts[result.documentId] ?? 1.0
+        return BM25Result(documentId: result.documentId, score: result.score * boost)
+      }
+      // Re-sort and also inject boosted categories that BM25 missed
+      for (categoryId, boost) in entityBoosts where boost > 1.5 {
+        if !categoryResults.contains(where: { $0.documentId == categoryId }) {
+          categoryResults.append(BM25Result(documentId: categoryId, score: boost))
+        }
+      }
+      categoryResults.sort { $0.score > $1.score }
+      categoryResults = Array(categoryResults.prefix(config.topCategories + 1))
+    }
 
     // Level 2: Template matching within top categories
     var candidates: [(category: String, categoryScore: Double, template: BM25Result)] = []
@@ -264,6 +382,28 @@ public final class IntentMatcher: Sendable {
     // Check thresholds
     guard best.categoryScore >= config.categoryThreshold,
           best.template.score >= config.templateThreshold else { return nil }
+
+    // Confidence gap check: reject low-confidence ambiguous matches.
+    // This prevents garbage results for off-topic queries.
+    let bestScore = combined(best)
+
+    // Check 1: If the combined score is very low, reject
+    if bestScore < 1.0 {
+      return nil
+    }
+
+    // Check 2: If there are alternatives from different categories with
+    // similar scores, the match is ambiguous
+    if candidates.count >= 2 {
+      let secondBestDifferentCategory = candidates.dropFirst()
+        .first { $0.category != best.category }
+      if let second = secondBestDifferentCategory {
+        let ratio = bestScore / max(combined(second), 0.001)
+        if ratio < 1.2 && bestScore < 2.5 {
+          return nil
+        }
+      }
+    }
 
     guard let template = store.template(byId: best.template.documentId) else { return nil }
 
@@ -304,6 +444,80 @@ public final class IntentMatcher: Sendable {
       )
       return (candidate.category, candidate.categoryScore, penalizedResult)
     }
+  }
+
+  // MARK: - Entity-Aware Category Boosting
+
+  /// Compute category boost factors based on detected entities.
+  /// Returns a map of categoryId → multiplier (1.0 = no change, >1.0 = boost).
+  private func computeEntityCategoryBoosts(_ entities: [RecognizedEntity]) -> [String: Double] {
+    guard !entities.isEmpty else { return [:] }
+
+    var boosts: [String: Double] = [:]
+
+    for entity in entities {
+      switch entity.type {
+      case .url:
+        // URL detected → strongly boost network, suppress git/cloud
+        boosts["network", default: 1.0] *= 3.0
+        boosts["git", default: 1.0] *= 0.3
+        boosts["cloud", default: 1.0] *= 0.5
+
+      case .ipAddress:
+        // IP address → network or system
+        boosts["network", default: 1.0] *= 2.5
+        boosts["system", default: 1.0] *= 1.5
+
+      case .host:
+        // Domain name → network (dig, ping, curl)
+        boosts["network", default: 1.0] *= 2.0
+
+      case .port:
+        // Port number → network (lsof, nc)
+        boosts["network", default: 1.0] *= 2.0
+
+      case .processName:
+        // Known service name → system (ps, kill)
+        boosts["system", default: 1.0] *= 2.0
+        boosts["cloud", default: 1.0] *= 0.5
+
+      case .applicationName:
+        // App name → macOS
+        boosts["macos", default: 1.0] *= 2.0
+
+      case .branchName, .gitRef:
+        // Git ref → git
+        boosts["git", default: 1.0] *= 2.0
+
+      case .glob:
+        // Glob pattern → file_ops
+        boosts["file_ops", default: 1.0] *= 1.5
+
+      case .envVar:
+        // Environment variable → system
+        boosts["system", default: 1.0] *= 1.5
+
+      case .commandName:
+        // A known CLI tool → boost the category that owns that command's template
+        if let categoryId = store.category(forTemplateId: findTemplateForCommand(entity.text)) {
+          boosts[categoryId, default: 1.0] *= 2.0
+        }
+
+      default:
+        break
+      }
+    }
+
+    return boosts
+  }
+
+  /// Find a template ID whose command starts with the given command name.
+  private func findTemplateForCommand(_ commandName: String) -> String {
+    let lower = commandName.lowercased()
+    if let candidates = store.commandPrefixIndex[lower] {
+      return candidates.first ?? ""
+    }
+    return ""
   }
 
   // MARK: - Helpers

@@ -105,9 +105,9 @@ public final class STMPipeline: Sendable {
     let entities = recognizer.recognize(query)
     timings.append(StageTiming(name: "entities", elapsedMs: t0.elapsedMs()))
 
-    // Step 1: Match intent
+    // Step 1: Match intent (entity-aware)
     t0 = PipelineTimer.now()
-    guard let match = matcher.match(query) else { return nil }
+    guard let match = matcher.match(query, entities: entities) else { return nil }
     timings.append(StageTiming(name: "match", elapsedMs: t0.elapsedMs()))
 
     // Step 2: Extract slots (entity-aware)

@@ -239,6 +239,33 @@ public enum BuiltInTemplates {
         ]
       ),
       CommandTemplate(
+        id: "find_images",
+        intents: [
+          "find images", "find all images", "find photos",
+          "find pictures", "find jpg files", "find png files",
+          "list all images", "find image files",
+          "find all photos in folder",
+        ],
+        command: "find {PATH} -type f \\( -name '*.jpg' -o -name '*.jpeg' -o -name '*.png' -o -name '*.gif' -o -name '*.webp' -o -name '*.svg' \\)",
+        slots: [
+          "PATH": SlotDefinition(type: .path, defaultValue: "."),
+        ]
+      ),
+      CommandTemplate(
+        id: "chmod_executable",
+        intents: [
+          "make executable", "chmod +x", "add execute permission",
+          "make file executable", "set executable",
+          "add executable permission", "mark as executable",
+        ],
+        command: "chmod +x {FILE}",
+        slots: [
+          "FILE": SlotDefinition(type: .path,
+            extractPattern: #"(?:permission|executable|chmod)\s+(?:to\s+)?(\S+\.\S+)"#),
+        ],
+        negativeKeywords: ["lambda", "invoke", "aws", "function"]
+      ),
+      CommandTemplate(
         id: "rsync_copy",
         intents: [
           "rsync", "rsync files", "sync files with rsync",
@@ -582,6 +609,8 @@ public enum BuiltInTemplates {
           "search files for pattern", "search for string",
           "find occurrences of", "search code for",
           "look for text", "find in files",
+          "recursively search for", "search recursively",
+          "search for word", "search entire project",
         ],
         command: "grep -rn '{PATTERN}' {PATH}",
         slots: [
@@ -1673,6 +1702,98 @@ public enum BuiltInTemplates {
           "COMMENT": SlotDefinition(type: .string, defaultValue: "",
             extractPattern: #"(?:comment|email)\s+(\S+)"#),
         ]
+      ),
+      CommandTemplate(
+        id: "pwd",
+        intents: [
+          "pwd", "print working directory", "current directory",
+          "where am i", "what directory am i in",
+          "show current path", "show current directory",
+        ],
+        command: "pwd"
+      ),
+      CommandTemplate(
+        id: "clear_terminal",
+        intents: [
+          "clear", "clear terminal", "clear screen",
+          "reset terminal", "cls", "clear the screen",
+        ],
+        command: "clear"
+      ),
+      CommandTemplate(
+        id: "export_var",
+        intents: [
+          "export", "set environment variable", "export variable",
+          "set env var", "define environment variable",
+          "set variable", "export env",
+        ],
+        command: "export {NAME}={VALUE}",
+        slots: [
+          "NAME": SlotDefinition(type: .string,
+            extractPattern: #"(?:export|variable|set)\s+(\w+)"#),
+          "VALUE": SlotDefinition(type: .string, defaultValue: "",
+            extractPattern: #"(?:=|to)\s+(\S+)"#),
+        ]
+      ),
+      CommandTemplate(
+        id: "man_page",
+        intents: [
+          "man", "manual for", "help with command",
+          "how to use", "how do I use", "explain command",
+          "what does command do", "show manual",
+          "command help", "documentation for",
+        ],
+        command: "man {COMMAND}",
+        slots: [
+          "COMMAND": SlotDefinition(type: .string,
+            extractPattern: #"(?:man|use|explain|for|about|with)\s+(\w+)"#),
+        ]
+      ),
+      CommandTemplate(
+        id: "command_help",
+        intents: [
+          "help flags", "what flags", "show options",
+          "what options does", "command options",
+          "what arguments", "allowed flags",
+        ],
+        command: "{COMMAND} --help",
+        slots: [
+          "COMMAND": SlotDefinition(type: .string,
+            extractPattern: #"(?:does|for|of)\s+(\w+)"#),
+        ],
+        discriminators: ["flags", "options", "arguments", "allowed"]
+      ),
+      CommandTemplate(
+        id: "ifconfig_show",
+        intents: [
+          "ifconfig", "network interfaces", "show network interfaces",
+          "list network interfaces", "ip address", "show ip address",
+          "my ip address", "what is my ip",
+        ],
+        command: "ifconfig"
+      ),
+      CommandTemplate(
+        id: "service_restart",
+        intents: [
+          "restart service", "restart nginx", "restart apache",
+          "restart postgres", "systemctl restart",
+          "launchctl restart", "reload service",
+        ],
+        command: "{SVC_RESTART} {SERVICE}",
+        slots: [
+          "SERVICE": SlotDefinition(type: .string,
+            extractPattern: #"(?:restart|reload|start|stop)\s+(\S+)"#),
+        ]
+      ),
+      CommandTemplate(
+        id: "free_memory",
+        intents: [
+          "free memory", "ram usage", "memory usage",
+          "how much ram", "available memory",
+          "show memory", "system memory",
+          "how much memory is being used",
+        ],
+        command: "vm_stat"
       ),
     ]
   )
