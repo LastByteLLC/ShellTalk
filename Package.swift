@@ -6,6 +6,7 @@ let package = Package(
   platforms: [.macOS(.v14)],  // Linux ignores this field
   products: [
     .executable(name: "shelltalk", targets: ["shelltalk"]),
+    .executable(name: "stm-eval", targets: ["stm-eval"]),
     .library(name: "ShellTalkKit", targets: ["ShellTalkKit"]),
   ],
   dependencies: [
@@ -27,6 +28,11 @@ let package = Package(
         .product(name: "Yams", package: "Yams"),
       ],
       path: "Sources/ShellTalkKit"
+    ),
+    .executableTarget(
+      name: "stm-eval",
+      dependencies: ["ShellTalkKit"],
+      path: "Sources/stm-eval"
     ),
     .testTarget(
       name: "ShellTalkKitTests",

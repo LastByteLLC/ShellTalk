@@ -30,6 +30,11 @@ public struct CommandTemplate: Sendable, Codable {
   public let platformOverrides: [String: String]?
   public let flags: [FlagDefinition]?
   public let tags: [String]?
+  /// Tokens that should penalize this template's score when present in the query.
+  public let negativeKeywords: [String]?
+  /// Tokens that MUST be present for this template to win command-prefix matching.
+  /// Templates without discriminators are the "default" for their command prefix.
+  public let discriminators: [String]?
 
   public init(
     id: String,
@@ -38,7 +43,9 @@ public struct CommandTemplate: Sendable, Codable {
     slots: [String: SlotDefinition] = [:],
     platformOverrides: [String: String]? = nil,
     flags: [FlagDefinition]? = nil,
-    tags: [String]? = nil
+    tags: [String]? = nil,
+    negativeKeywords: [String]? = nil,
+    discriminators: [String]? = nil
   ) {
     self.id = id
     self.intents = intents
@@ -47,6 +54,8 @@ public struct CommandTemplate: Sendable, Codable {
     self.platformOverrides = platformOverrides
     self.flags = flags
     self.tags = tags
+    self.negativeKeywords = negativeKeywords
+    self.discriminators = discriminators
   }
 }
 

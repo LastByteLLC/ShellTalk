@@ -65,8 +65,8 @@ public struct BM25: Sendable {
   }
 
   /// Search for documents matching the query. Returns results sorted by score descending.
-  public func search(_ query: String, topK: Int = 10) -> [BM25Result] {
-    let queryTokens = Self.tokenize(query)
+  public func search(_ query: String, topK: Int = 10, expandSynonyms: Bool = true) -> [BM25Result] {
+    let queryTokens = Self.tokenize(query, expandSynonyms: expandSynonyms)
     guard !queryTokens.isEmpty else { return [] }
 
     var results: [BM25Result] = []
@@ -107,14 +107,75 @@ public struct BM25: Sendable {
   // MARK: - Tokenization
 
   /// Tokenize text into lowercase words, filtering stop words and short tokens.
-  public static func tokenize(_ text: String) -> [String] {
+  /// When `expandSynonyms` is true, informal verbs are expanded to canonical terms.
+  public static func tokenize(_ text: String, expandSynonyms: Bool = false) -> [String] {
     let lowered = text.lowercased()
     // Split on non-alphanumeric characters
-    let words = lowered.components(separatedBy: CharacterSet.alphanumerics.inverted)
+    var words = lowered.components(separatedBy: CharacterSet.alphanumerics.inverted)
       .filter { $0.count >= 2 }
       .filter { !stopWords.contains($0) }
+
+    if expandSynonyms {
+      var expanded: [String] = []
+      for word in words {
+        expanded.append(word)
+        if let synonyms = Self.synonymTable[word] {
+          expanded.append(contentsOf: synonyms)
+        }
+      }
+      words = expanded
+    }
+
     return words
   }
+
+  /// Synonym expansion table: informal verbs → canonical terms.
+  /// Applied to user queries (not template intents) to bridge vocabulary gaps.
+  static let synonymTable: [String: [String]] = [
+    // Delete/remove synonyms
+    "erase": ["delete", "remove"],
+    "nuke": ["delete", "remove"],
+    "wipe": ["delete", "remove", "clean"],
+    "purge": ["delete", "remove", "clean"],
+    "destroy": ["delete", "remove"],
+    "obliterate": ["delete", "remove"],
+    // Kill/stop synonyms
+    "zap": ["kill", "terminate", "stop"],
+    "slay": ["kill", "terminate"],
+    "halt": ["stop", "kill"],
+    "terminate": ["kill", "stop"],
+    // Copy/move synonyms
+    "duplicate": ["copy"],
+    "replicate": ["copy"],
+    "relocate": ["move"],
+    // Show/display synonyms
+    "display": ["show", "list"],
+    "peek": ["show", "head", "preview"],
+    "inspect": ["show", "check"],
+    "reveal": ["show", "open"],
+    "view": ["show"],
+    "examine": ["show", "check"],
+    // Push/deploy synonyms
+    "ship": ["push", "deploy"],
+    "publish": ["push", "deploy"],
+    "release": ["deploy", "push"],
+    // Search/find synonyms
+    "locate": ["find", "which", "where"],
+    "lookup": ["find", "search"],
+    "hunt": ["find", "search"],
+    "scan": ["search", "find"],
+    // Start/run synonyms
+    "launch": ["start", "run", "open"],
+    "execute": ["run"],
+    "fire": ["start", "run"],
+    "spin": ["start", "run"],
+    // Fetch/download synonyms
+    "grab": ["download", "fetch"],
+    "pull": ["fetch", "download"],
+    // Compress synonyms
+    "squash": ["compress"],
+    "shrink": ["compress", "resize"],
+  ]
 
   /// English stop words (compact set for CLI use).
   static let stopWords: Set<String> = [

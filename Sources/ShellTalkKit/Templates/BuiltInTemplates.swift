@@ -23,7 +23,7 @@ public enum BuiltInTemplates {
   public static let fileOperations = TemplateCategory(
     id: "file_ops",
     name: "File Operations",
-    description: "File and directory manipulation: list, copy, move, delete, find, permissions, disk usage",
+    description: "File and directory manipulation: list, copy, move, delete, find, permissions, disk usage, rsync, diff, chown",
     templates: [
       CommandTemplate(
         id: "ls_files",
@@ -31,6 +31,9 @@ public enum BuiltInTemplates {
           "list files", "show files", "what files are here",
           "directory listing", "show directory contents", "ls",
           "what's in this folder", "list directory",
+          "what is in this folder", "list my files",
+          "show folder contents", "show what files",
+          "files in directory", "whats in this folder",
         ],
         command: "ls {LS_COLOR} -la {PATH}",
         slots: [
@@ -82,7 +85,8 @@ public enum BuiltInTemplates {
           "PATH": SlotDefinition(type: .path, defaultValue: "."),
           "DAYS": SlotDefinition(type: .number, defaultValue: "1",
             extractPattern: #"(?:last|past)\s+(\d+)\s+days?|(\d+)\s+days?\s+ago"#),
-        ]
+        ],
+        negativeKeywords: ["who", "blame", "author", "wrote"]
       ),
       CommandTemplate(
         id: "find_large_files",
@@ -127,7 +131,9 @@ public enum BuiltInTemplates {
         id: "rm_file",
         intents: [
           "delete file", "remove file", "rm", "delete files",
-          "remove files", "trash file",
+          "remove files", "trash file", "delete this", "erase file",
+          "get rid of file", "trash files", "delete the file",
+          "nuke file", "erase", "wipe file", "clean up files",
         ],
         command: "rm {FLAGS} {PATH}",
         slots: [
@@ -182,7 +188,8 @@ public enum BuiltInTemplates {
         slots: [
           "PATH": SlotDefinition(type: .path, defaultValue: "."),
           "PATTERN": SlotDefinition(type: .glob, defaultValue: "*"),
-        ]
+        ],
+        negativeKeywords: ["lines", "words", "characters", "bytes"]
       ),
       CommandTemplate(
         id: "tree_view",
@@ -231,6 +238,53 @@ public enum BuiltInTemplates {
           "DEST": SlotDefinition(type: .path, extractPattern: #"(?:as|at|named)\s+(\S+)"#),
         ]
       ),
+      CommandTemplate(
+        id: "rsync_copy",
+        intents: [
+          "rsync", "rsync files", "sync files with rsync",
+          "rsync copy", "mirror directory", "rsync directory",
+          "synchronize folders", "rsync to remote",
+        ],
+        command: "rsync -avz {SOURCE} {DEST}",
+        slots: [
+          "SOURCE": SlotDefinition(type: .path,
+            extractPattern: #"(?:rsync|sync|mirror)\s+(\S+)"#),
+          "DEST": SlotDefinition(type: .path,
+            extractPattern: #"(?:to|into)\s+(\S+)"#),
+        ]
+      ),
+      CommandTemplate(
+        id: "diff_files",
+        intents: [
+          "diff files", "compare files", "diff two files",
+          "file difference", "compare two files",
+          "what's different between files",
+        ],
+        command: "diff {FLAGS} {FILE1} {FILE2}",
+        slots: [
+          "FLAGS": SlotDefinition(type: .string, defaultValue: "-u"),
+          "FILE1": SlotDefinition(type: .path,
+            extractPattern: #"(?:diff|compare)\s+(\S+)"#),
+          "FILE2": SlotDefinition(type: .path,
+            extractPattern: #"(?:and|with|to)\s+(\S+)"#),
+        ],
+        negativeKeywords: ["git", "staged", "branch", "commit"]
+      ),
+      CommandTemplate(
+        id: "chown_owner",
+        intents: [
+          "change owner", "chown", "change file ownership",
+          "set file owner", "change ownership",
+        ],
+        command: "chown {FLAGS} {OWNER} {PATH}",
+        slots: [
+          "FLAGS": SlotDefinition(type: .string, defaultValue: ""),
+          "OWNER": SlotDefinition(type: .string,
+            extractPattern: #"(?:chown|owner)\s+(\S+)"#),
+          "PATH": SlotDefinition(type: .path,
+            extractPattern: #"(?:of|on|for)\s+(\S+)"#),
+        ]
+      ),
     ]
   )
 
@@ -239,7 +293,7 @@ public enum BuiltInTemplates {
   public static let git = TemplateCategory(
     id: "git",
     name: "Git",
-    description: "Git version control: status, diff, log, commit, branch, merge, rebase, stash, remote, tag",
+    description: "Git version control: status, diff, log, commit, branch, merge, rebase, stash, remote, tag, clone, fetch, reset",
     templates: [
       CommandTemplate(
         id: "git_status",
@@ -247,6 +301,8 @@ public enum BuiltInTemplates {
           "git status", "show git status", "what changed",
           "show changes", "what files changed", "modified files",
           "uncommitted changes", "working tree status",
+          "show me changes", "what has changed", "changes in git",
+          "pending changes", "status of repo", "repo status",
         ],
         command: "git status"
       ),
@@ -277,7 +333,9 @@ public enum BuiltInTemplates {
         intents: [
           "git log", "show commit history", "recent commits",
           "commit log", "what was committed", "show history",
-          "last commits", "git history",
+          "last commits", "git history", "show log",
+          "view commits", "history of commits", "commit history",
+          "show git log", "log of changes",
         ],
         command: "git log --oneline -n {COUNT}",
         slots: [
@@ -325,6 +383,9 @@ public enum BuiltInTemplates {
         intents: [
           "list branches", "show branches", "git branch",
           "what branches exist", "all branches",
+          "show git branches", "git branch list",
+          "list git branches", "available branches",
+          "which branches", "see branches",
         ],
         command: "git branch -a"
       ),
@@ -357,6 +418,8 @@ public enum BuiltInTemplates {
         intents: [
           "stash changes", "git stash", "save work temporarily",
           "stash current changes", "put aside changes",
+          "stash my work", "git stash save", "shelve changes",
+          "stash everything",
         ],
         command: "git stash"
       ),
@@ -413,6 +476,7 @@ public enum BuiltInTemplates {
         intents: [
           "push changes", "git push", "push to remote",
           "push commits", "upload to remote",
+          "ship code", "ship to origin", "deploy to remote",
         ],
         command: "git push"
       ),
@@ -421,6 +485,10 @@ public enum BuiltInTemplates {
         intents: [
           "git blame", "who changed this", "blame file",
           "who wrote this", "show line authors",
+          "who changed file", "who modified this file",
+          "who edited this", "annotate file", "git annotate",
+          "who changed", "who last modified", "who touched this file",
+          "blame", "who authored these lines",
         ],
         command: "git blame {PATH}",
         slots: [
@@ -450,6 +518,51 @@ public enum BuiltInTemplates {
         slots: [
           "TAG": SlotDefinition(type: .string,
             extractPattern: #"(?:tag)\s+(\S+)"#),
+        ]
+      ),
+      CommandTemplate(
+        id: "git_clone",
+        intents: [
+          "git clone", "clone repository", "clone repo",
+          "clone from github", "download repository",
+          "clone git repo", "git clone url",
+        ],
+        command: "git clone {URL} {DIR}",
+        slots: [
+          "URL": SlotDefinition(type: .url,
+            extractPattern: #"((?:https?://|git@)\S+)"#),
+          "DIR": SlotDefinition(type: .path, defaultValue: "",
+            extractPattern: #"(?:into|to)\s+(\S+)"#),
+        ]
+      ),
+      CommandTemplate(
+        id: "git_fetch",
+        intents: [
+          "git fetch", "fetch from remote", "fetch upstream",
+          "fetch origin", "fetch all remotes",
+          "fetch without merging",
+        ],
+        command: "git fetch {REMOTE} {FLAGS}",
+        slots: [
+          "REMOTE": SlotDefinition(type: .string, defaultValue: "",
+            extractPattern: #"(?:fetch)\s+(\S+)"#),
+          "FLAGS": SlotDefinition(type: .string, defaultValue: ""),
+        ],
+        negativeKeywords: ["url", "http", "https", "curl", "download", "api"]
+      ),
+      CommandTemplate(
+        id: "git_reset",
+        intents: [
+          "git reset", "reset to commit", "unstage files",
+          "undo last commit", "reset head",
+          "git reset hard", "discard commits",
+        ],
+        command: "git reset {FLAGS} {REF}",
+        slots: [
+          "FLAGS": SlotDefinition(type: .string, defaultValue: "",
+            extractPattern: #"(--hard|--soft|--mixed)"#),
+          "REF": SlotDefinition(type: .string, defaultValue: "HEAD",
+            extractPattern: #"(?:to|reset)\s+([a-f0-9]{6,40}|HEAD~?\d*)"#),
         ]
       ),
     ]
@@ -489,7 +602,8 @@ public enum BuiltInTemplates {
           "PATTERN": SlotDefinition(type: .pattern,
             extractPattern: #"(?:of|for)\s+['\"]?(\S+)['\"]?"#),
           "PATH": SlotDefinition(type: .path, defaultValue: "."),
-        ]
+        ],
+        discriminators: ["count", "many", "number", "occurrences", "times"]
       ),
       CommandTemplate(
         id: "rg_search",
@@ -502,7 +616,8 @@ public enum BuiltInTemplates {
           "PATTERN": SlotDefinition(type: .pattern,
             extractPattern: #"(?:rg|search|for)\s+['\"]?(\S+)['\"]?"#),
           "PATH": SlotDefinition(type: .path, defaultValue: "."),
-        ]
+        ],
+        negativeKeywords: ["brew", "homebrew", "install", "package"]
       ),
       CommandTemplate(
         id: "sed_replace",
@@ -580,6 +695,8 @@ public enum BuiltInTemplates {
         intents: [
           "count lines", "line count", "word count",
           "how many lines", "wc", "count words",
+          "number of lines", "how many lines in file",
+          "count lines in", "lines in file", "character count",
         ],
         command: "wc -{MODE} {FILE}",
         slots: [
@@ -630,7 +747,9 @@ public enum BuiltInTemplates {
         slots: [
           "FILE": SlotDefinition(type: .path,
             extractPattern: #"(?:follow|watch|stream|monitor)\s+(\S+)"#),
-        ]
+        ],
+        negativeKeywords: ["remove", "delete", "old", "clean"],
+        discriminators: ["follow", "-f", "stream", "monitor", "live", "watch", "real"]
       ),
       CommandTemplate(
         id: "cut_columns",
@@ -697,7 +816,7 @@ public enum BuiltInTemplates {
   public static let devTools = TemplateCategory(
     id: "dev_tools",
     name: "Dev Tools",
-    description: "Development toolchains: Swift build test run, cargo, go, node npm, python3, docker, kubectl",
+    description: "Development toolchains: Swift build test run, cargo, go, node npm, python3, docker, docker compose, kubectl, make",
     templates: [
       CommandTemplate(
         id: "swift_build",
@@ -715,12 +834,13 @@ public enum BuiltInTemplates {
         intents: [
           "swift build release", "build release", "compile for release",
           "build optimized", "production build swift",
-          "swift build -c release",
+          "swift build -c release", "release build",
         ],
         command: "swift build -c release {FLAGS}",
         slots: [
           "FLAGS": SlotDefinition(type: .string, defaultValue: ""),
-        ]
+        ],
+        discriminators: ["release", "optimized", "production"]
       ),
       CommandTemplate(
         id: "swift_test",
@@ -731,7 +851,8 @@ public enum BuiltInTemplates {
         command: "swift test {FLAGS}",
         slots: [
           "FLAGS": SlotDefinition(type: .string, defaultValue: ""),
-        ]
+        ],
+        negativeKeywords: ["mkdir", "fixtures", "directory", "folder", "create", "make"]
       ),
       CommandTemplate(
         id: "swift_run",
@@ -766,7 +887,8 @@ public enum BuiltInTemplates {
         command: "cargo test {FLAGS}",
         slots: [
           "FLAGS": SlotDefinition(type: .string, defaultValue: ""),
-        ]
+        ],
+        negativeKeywords: ["mkdir", "fixtures", "directory", "folder", "create"]
       ),
       CommandTemplate(
         id: "cargo_run",
@@ -801,7 +923,8 @@ public enum BuiltInTemplates {
         slots: [
           "FLAGS": SlotDefinition(type: .string, defaultValue: ""),
           "PATH": SlotDefinition(type: .path, defaultValue: "./..."),
-        ]
+        ],
+        negativeKeywords: ["mkdir", "fixtures", "directory", "folder", "create"]
       ),
       CommandTemplate(
         id: "npm_run",
@@ -814,7 +937,8 @@ public enum BuiltInTemplates {
         slots: [
           "SCRIPT": SlotDefinition(type: .string, defaultValue: "start",
             extractPattern: #"(?:run|script)\s+(\S+)"#),
-        ]
+        ],
+        negativeKeywords: ["install", "add", "dependency", "package"]
       ),
       CommandTemplate(
         id: "python_run",
@@ -828,7 +952,8 @@ public enum BuiltInTemplates {
           "FILE": SlotDefinition(type: .path,
             extractPattern: #"(?:run|execute)\s+(\S+\.py)"#),
           "ARGS": SlotDefinition(type: .string, defaultValue: ""),
-        ]
+        ],
+        negativeKeywords: ["which", "where", "locate", "path", "version", "install"]
       ),
       CommandTemplate(
         id: "docker_build",
@@ -842,7 +967,9 @@ public enum BuiltInTemplates {
           "TAG": SlotDefinition(type: .string,
             extractPattern: #"(?:tag|named?|-t)\s+(\S+)"#),
           "PATH": SlotDefinition(type: .path, defaultValue: "."),
-        ]
+        ],
+        negativeKeywords: ["trash", "artifacts", "remove", "delete", "clean", "sweep"],
+        discriminators: ["build", "dockerfile", "image"]
       ),
       CommandTemplate(
         id: "docker_run",
@@ -867,7 +994,8 @@ public enum BuiltInTemplates {
         command: "docker ps {FLAGS}",
         slots: [
           "FLAGS": SlotDefinition(type: .string, defaultValue: ""),
-        ]
+        ],
+        negativeKeywords: ["process", "nginx", "apache", "node", "service", "pid", "kill"]
       ),
       CommandTemplate(
         id: "kubectl_get",
@@ -881,6 +1009,48 @@ public enum BuiltInTemplates {
             extractPattern: #"(?:get|list|show)\s+(\w+)"#),
           "FLAGS": SlotDefinition(type: .string, defaultValue: ""),
         ]
+      ),
+      CommandTemplate(
+        id: "docker_compose_up",
+        intents: [
+          "docker compose up", "start docker compose", "docker-compose up",
+          "bring up compose services", "start compose stack",
+          "run docker compose", "start all containers",
+        ],
+        command: "docker compose up {FLAGS}",
+        slots: [
+          "FLAGS": SlotDefinition(type: .string, defaultValue: "-d"),
+        ],
+        discriminators: ["compose", "docker-compose", "services", "stack"]
+      ),
+      CommandTemplate(
+        id: "docker_compose_down",
+        intents: [
+          "docker compose down", "stop docker compose", "docker-compose down",
+          "tear down compose", "stop compose services",
+          "stop all containers",
+        ],
+        command: "docker compose down {FLAGS}",
+        slots: [
+          "FLAGS": SlotDefinition(type: .string, defaultValue: ""),
+        ],
+        discriminators: ["compose", "docker-compose", "down"]
+      ),
+      CommandTemplate(
+        id: "make_target",
+        intents: [
+          "make", "run make", "make build", "make install",
+          "run makefile", "make clean", "make target",
+          "build with make", "run make target",
+        ],
+        command: "make {TARGET}",
+        slots: [
+          "TARGET": SlotDefinition(type: .string, defaultValue: "",
+            extractPattern: #"(?:make)\s+(\S+)"#),
+        ],
+        negativeKeywords: ["directory", "folder", "file", "new", "copy", "branch",
+                           "executable", "script", "link", "symlink", "empty",
+                           "request", "get", "post", "http", "url", "sure"]
       ),
     ]
   )
@@ -898,6 +1068,8 @@ public enum BuiltInTemplates {
           "open file", "open in default app", "launch file",
           "open this", "open with default application",
           "open folder in Finder", "reveal in Finder",
+          "open document", "open in default", "open a file",
+          "open the file", "open it",
         ],
         command: "{OPEN_CMD} {PATH}",
         slots: [
@@ -917,7 +1089,8 @@ public enum BuiltInTemplates {
             extractPattern: #"(?:with|in|using)\s+['\"]?(\w[\w\s]*\w)['\"]?"#),
           "PATH": SlotDefinition(type: .path, defaultValue: "",
             extractPattern: #"(?:open)\s+(\S+)"#),
-        ]
+        ],
+        discriminators: ["with", "using", "via"]
       ),
       CommandTemplate(
         id: "pbcopy",
@@ -1133,7 +1306,8 @@ public enum BuiltInTemplates {
             extractPattern: #"(?:to)\s+(https?://\S+)|(https?://\S+)"#),
           "BODY": SlotDefinition(type: .string,
             extractPattern: #"(?:body|data|json)\s+['\"]?(\{.+\})['\"]?"#),
-        ]
+        ],
+        discriminators: ["post", "send", "body", "json"]
       ),
       CommandTemplate(
         id: "curl_download",
@@ -1148,7 +1322,8 @@ public enum BuiltInTemplates {
             extractPattern: #"(https?://\S+)"#),
           "OUTPUT": SlotDefinition(type: .path, defaultValue: "output",
             extractPattern: #"(?:to|as|save)\s+(\S+)"#),
-        ]
+        ],
+        discriminators: ["download", "save", "output"]
       ),
       CommandTemplate(
         id: "curl_headers",
@@ -1161,7 +1336,8 @@ public enum BuiltInTemplates {
         slots: [
           "URL": SlotDefinition(type: .url,
             extractPattern: #"(https?://\S+)"#),
-        ]
+        ],
+        discriminators: ["headers", "header", "response"]
       ),
       CommandTemplate(
         id: "curl_auth",
@@ -1175,7 +1351,8 @@ public enum BuiltInTemplates {
             extractPattern: #"(?:token|bearer)\s+(\S+)"#),
           "URL": SlotDefinition(type: .url,
             extractPattern: #"(https?://\S+)"#),
-        ]
+        ],
+        discriminators: ["auth", "token", "bearer", "authorization", "authenticated"]
       ),
       CommandTemplate(
         id: "ssh_connect",
@@ -1257,7 +1434,8 @@ public enum BuiltInTemplates {
         slots: [
           "PORT": SlotDefinition(type: .port,
             extractPattern: #"(?:port)\s+(\d+)|:(\d+)|(\d{2,5})"#),
-        ]
+        ],
+        discriminators: ["port", "listening", "socket"]
       ),
       CommandTemplate(
         id: "ping_host",
@@ -1289,7 +1467,8 @@ public enum BuiltInTemplates {
         intents: [
           "list processes", "ps", "show running processes",
           "what processes are running", "process list",
-          "show all processes",
+          "show all processes", "ps aux", "system processes",
+          "list all system processes", "running programs",
         ],
         command: "ps aux {FLAGS}",
         slots: [
@@ -1301,13 +1480,17 @@ public enum BuiltInTemplates {
         intents: [
           "find process", "search processes", "ps grep",
           "is process running", "check if running",
-          "find process by name",
+          "find process by name", "is service running",
+          "check if process is running", "grep process",
+          "which process is running", "ps aux grep",
+          "find running process", "search for process",
         ],
         command: "ps aux | grep '{PATTERN}'",
         slots: [
           "PATTERN": SlotDefinition(type: .pattern,
             extractPattern: #"(?:process|for|named?|grep)\s+(\S+)"#),
-        ]
+        ],
+        negativeKeywords: ["port", "listening", "socket"]
       ),
       CommandTemplate(
         id: "kill_process",
@@ -1361,7 +1544,8 @@ public enum BuiltInTemplates {
         slots: [
           "FLAGS": SlotDefinition(type: .string, defaultValue: "",
             extractPattern: #"(?:by|for)\s+(\S+)"#),
-        ]
+        ],
+        negativeKeywords: ["safari", "chrome", "finder", "app", "application", "xcode", "list", "directory", "folder"]
       ),
       CommandTemplate(
         id: "df_disk_free",
@@ -1421,6 +1605,9 @@ public enum BuiltInTemplates {
         intents: [
           "which command", "where is binary", "find executable",
           "which", "path to command", "locate binary",
+          "where is command", "find where command is",
+          "full path to binary", "command location",
+          "which binary", "where is installed",
         ],
         command: "which {CMD}",
         slots: [
@@ -1444,6 +1631,48 @@ public enum BuiltInTemplates {
           "what user am i", "my username",
         ],
         command: "whoami"
+      ),
+      CommandTemplate(
+        id: "date_show",
+        intents: [
+          "date", "show date", "current date",
+          "what date is it", "show time",
+          "current time", "date and time",
+        ],
+        command: "date '{FORMAT}'",
+        slots: [
+          "FORMAT": SlotDefinition(type: .string, defaultValue: "+%Y-%m-%d %H:%M:%S",
+            extractPattern: #"(?:format)\s+['\"]?(\S+)['\"]?"#),
+        ]
+      ),
+      CommandTemplate(
+        id: "history_search",
+        intents: [
+          "history", "shell history", "command history",
+          "show history", "recent commands",
+          "search history", "what commands did I run",
+        ],
+        command: "history {FLAGS}",
+        slots: [
+          "FLAGS": SlotDefinition(type: .string, defaultValue: "",
+            extractPattern: #"(?:last)\s+(\d+)"#),
+        ],
+        negativeKeywords: ["git", "commit", "log", "branch"]
+      ),
+      CommandTemplate(
+        id: "ssh_keygen",
+        intents: [
+          "ssh keygen", "generate ssh key", "create ssh key",
+          "new ssh key", "ssh-keygen", "generate key pair",
+          "create rsa key", "create ed25519 key",
+        ],
+        command: "ssh-keygen -t {TYPE} -C '{COMMENT}'",
+        slots: [
+          "TYPE": SlotDefinition(type: .string, defaultValue: "ed25519",
+            extractPattern: #"(?:type|algorithm)\s+(rsa|ed25519|ecdsa)"#),
+          "COMMENT": SlotDefinition(type: .string, defaultValue: "",
+            extractPattern: #"(?:comment|email)\s+(\S+)"#),
+        ]
       ),
     ]
   )
@@ -1473,13 +1702,15 @@ public enum BuiltInTemplates {
         intents: [
           "brew search", "search homebrew", "find brew package",
           "homebrew search", "is it on homebrew",
-          "search for formula",
+          "search for formula", "search for package on homebrew",
+          "look for brew formula", "brew find",
         ],
         command: "brew search {QUERY}",
         slots: [
           "QUERY": SlotDefinition(type: .string,
             extractPattern: #"(?:search|find|for)\s+(\S+)"#),
-        ]
+        ],
+        discriminators: ["search", "find", "look"]
       ),
       CommandTemplate(
         id: "brew_list",
@@ -1509,7 +1740,8 @@ public enum BuiltInTemplates {
         slots: [
           "PACKAGE": SlotDefinition(type: .string,
             extractPattern: #"(?:info|about|details)\s+(?:for\s+)?(\S+)"#),
-        ]
+        ],
+        discriminators: ["info", "details", "about", "show"]
       ),
       CommandTemplate(
         id: "npm_install",
@@ -1522,7 +1754,8 @@ public enum BuiltInTemplates {
         slots: [
           "PACKAGE": SlotDefinition(type: .string,
             extractPattern: #"(?:install|add)\s+(\S+)"#),
-        ]
+        ],
+        discriminators: ["install", "add"]
       ),
       CommandTemplate(
         id: "npm_list",
@@ -1574,7 +1807,8 @@ public enum BuiltInTemplates {
         slots: [
           "PACKAGE": SlotDefinition(type: .string,
             extractPattern: #"(?:add|install)\s+(\S+)"#),
-        ]
+        ],
+        discriminators: ["add", "install", "dependency", "crate"]
       ),
       CommandTemplate(
         id: "gem_install",
@@ -1769,7 +2003,7 @@ public enum BuiltInTemplates {
   public static let cloud = TemplateCategory(
     id: "cloud",
     name: "Cloud",
-    description: "Cloud CLI tools: aws s3 cp ls sync, aws ec2, aws lambda, aws iam, aws logs, kubectl get describe logs",
+    description: "Cloud CLI tools: aws s3 ec2 lambda iam logs, kubectl, wrangler cloudflare workers, sam serverless deploy invoke logs",
     templates: [
       CommandTemplate(
         id: "aws_s3_ls",
@@ -1782,7 +2016,8 @@ public enum BuiltInTemplates {
         slots: [
           "BUCKET": SlotDefinition(type: .string, defaultValue: "",
             extractPattern: #"(s3://\S+)"#),
-        ]
+        ],
+        negativeKeywords: ["directory", "folder", "here", "files", "local"]
       ),
       CommandTemplate(
         id: "aws_s3_cp",
@@ -1797,7 +2032,8 @@ public enum BuiltInTemplates {
             extractPattern: #"(?:cp|copy|upload)\s+(\S+)"#),
           "DEST": SlotDefinition(type: .string,
             extractPattern: #"(?:to)\s+(\S+)"#),
-        ]
+        ],
+        negativeKeywords: ["curl", "wget", "http", "https", "url", "server"]
       ),
       CommandTemplate(
         id: "aws_s3_sync",
@@ -1813,7 +2049,8 @@ public enum BuiltInTemplates {
           "DEST": SlotDefinition(type: .string,
             extractPattern: #"(?:to|with)\s+(\S+)"#),
           "FLAGS": SlotDefinition(type: .string, defaultValue: ""),
-        ]
+        ],
+        negativeKeywords: ["nuke", "delete", "trash", "remove", "build"]
       ),
       CommandTemplate(
         id: "aws_ec2_describe",
@@ -1825,7 +2062,8 @@ public enum BuiltInTemplates {
         command: "aws ec2 describe-instances {FLAGS}",
         slots: [
           "FLAGS": SlotDefinition(type: .string, defaultValue: "--query 'Reservations[*].Instances[*].[InstanceId,State.Name,InstanceType]' --output table"),
-        ]
+        ],
+        negativeKeywords: ["process", "nginx", "apache", "docker", "container", "pid", "kill"]
       ),
       CommandTemplate(
         id: "aws_lambda_invoke",
@@ -1897,7 +2135,8 @@ public enum BuiltInTemplates {
             extractPattern: #"(?:describe)\s+(\w+)"#),
           "NAME": SlotDefinition(type: .string,
             extractPattern: #"(?:describe\s+\w+)\s+(\S+)"#),
-        ]
+        ],
+        discriminators: ["describe", "details", "info"]
       ),
       CommandTemplate(
         id: "kubectl_logs",
@@ -1912,7 +2151,8 @@ public enum BuiltInTemplates {
             extractPattern: #"(-f|--follow|--tail=\d+)"#),
           "POD": SlotDefinition(type: .string,
             extractPattern: #"(?:logs?|pod)\s+(\S+)"#),
-        ]
+        ],
+        discriminators: ["logs", "log"]
       ),
       CommandTemplate(
         id: "kubectl_apply",
@@ -1925,7 +2165,254 @@ public enum BuiltInTemplates {
         slots: [
           "FILE": SlotDefinition(type: .path,
             extractPattern: #"(?:apply|deploy)\s+(\S+)"#),
-        ]
+        ],
+        discriminators: ["apply", "deploy", "manifest"]
+      ),
+
+      // MARK: Wrangler (Cloudflare Workers)
+
+      CommandTemplate(
+        id: "wrangler_dev",
+        intents: [
+          "wrangler dev", "cloudflare worker dev", "start worker locally",
+          "run worker dev server", "local cloudflare worker",
+          "test worker locally", "wrangler local dev",
+        ],
+        command: "wrangler dev {FLAGS}",
+        slots: [
+          "FLAGS": SlotDefinition(type: .string, defaultValue: ""),
+        ],
+        discriminators: ["dev", "local", "locally", "test"]
+      ),
+      CommandTemplate(
+        id: "wrangler_deploy",
+        intents: [
+          "wrangler deploy", "deploy cloudflare worker", "publish worker",
+          "wrangler publish", "push worker to cloudflare",
+          "deploy to cloudflare", "ship worker",
+          "deploy worker to production",
+        ],
+        command: "wrangler deploy {FLAGS}",
+        slots: [
+          "FLAGS": SlotDefinition(type: .string, defaultValue: ""),
+        ],
+        discriminators: ["deploy", "publish", "ship", "production"]
+      ),
+      CommandTemplate(
+        id: "wrangler_tail",
+        intents: [
+          "wrangler tail", "tail cloudflare worker logs",
+          "stream worker logs", "cloudflare worker logs",
+          "watch worker logs", "follow worker output",
+        ],
+        command: "wrangler tail {FLAGS}",
+        slots: [
+          "FLAGS": SlotDefinition(type: .string, defaultValue: ""),
+        ],
+        discriminators: ["tail", "logs", "stream", "watch", "follow"]
+      ),
+      CommandTemplate(
+        id: "wrangler_secret",
+        intents: [
+          "wrangler secret", "set cloudflare worker secret",
+          "add worker secret", "wrangler secret put",
+          "set worker environment variable", "cloudflare secret",
+        ],
+        command: "wrangler secret put {NAME}",
+        slots: [
+          "NAME": SlotDefinition(type: .string,
+            extractPattern: #"(?:secret|variable|put)\s+(\S+)"#),
+        ],
+        discriminators: ["secret", "variable", "env"]
+      ),
+      CommandTemplate(
+        id: "wrangler_init",
+        intents: [
+          "wrangler init", "create cloudflare worker",
+          "new cloudflare worker project", "init worker project",
+          "scaffold cloudflare worker", "wrangler generate",
+        ],
+        command: "wrangler init {NAME}",
+        slots: [
+          "NAME": SlotDefinition(type: .string, defaultValue: "",
+            extractPattern: #"(?:init|create|named?)\s+(\S+)"#),
+        ],
+        discriminators: ["init", "create", "new", "scaffold", "generate"]
+      ),
+
+      // MARK: AWS SAM
+
+      CommandTemplate(
+        id: "sam_build",
+        intents: [
+          "sam build", "build sam application", "build serverless app with sam",
+          "aws sam build", "compile sam project",
+        ],
+        command: "sam build {FLAGS}",
+        slots: [
+          "FLAGS": SlotDefinition(type: .string, defaultValue: ""),
+        ],
+        negativeKeywords: ["trash", "artifacts", "remove", "delete", "clean", "docker",
+                           "swift", "rust", "cargo", "go", "golang", "flutter", "react",
+                           "node", "npm", "nuke", "test"],
+        discriminators: ["sam", "serverless"]
+      ),
+      CommandTemplate(
+        id: "sam_deploy",
+        intents: [
+          "sam deploy", "deploy sam application", "deploy with sam",
+          "aws sam deploy", "sam deploy guided",
+          "push sam stack to aws", "deploy sam to production",
+        ],
+        command: "sam deploy {FLAGS}",
+        slots: [
+          "FLAGS": SlotDefinition(type: .string, defaultValue: "--guided"),
+        ],
+        negativeKeywords: ["kubernetes", "docker", "cloudflare", "worker", "serverless framework"],
+        discriminators: ["sam", "guided"]
+      ),
+      CommandTemplate(
+        id: "sam_local_invoke",
+        intents: [
+          "sam local invoke", "invoke sam function locally",
+          "test sam function", "run lambda locally with sam",
+          "sam invoke local", "local sam test",
+        ],
+        command: "sam local invoke {FUNCTION} {FLAGS}",
+        slots: [
+          "FUNCTION": SlotDefinition(type: .string, defaultValue: "",
+            extractPattern: #"(?:invoke|function)\s+(\S+)"#),
+          "FLAGS": SlotDefinition(type: .string, defaultValue: ""),
+        ],
+        discriminators: ["invoke", "local", "locally", "test"]
+      ),
+      CommandTemplate(
+        id: "sam_local_api",
+        intents: [
+          "sam local start-api", "start local api with sam",
+          "sam local api gateway", "run sam api locally",
+          "sam start local server", "local sam api",
+        ],
+        command: "sam local start-api {FLAGS}",
+        slots: [
+          "FLAGS": SlotDefinition(type: .string, defaultValue: ""),
+        ],
+        discriminators: ["api", "start-api", "server", "gateway"]
+      ),
+      CommandTemplate(
+        id: "sam_logs",
+        intents: [
+          "sam logs", "fetch sam logs", "aws sam logs",
+          "view sam function logs", "sam tail logs",
+          "stream sam lambda logs",
+        ],
+        command: "sam logs -n {FUNCTION} --tail {FLAGS}",
+        slots: [
+          "FUNCTION": SlotDefinition(type: .string, defaultValue: "",
+            extractPattern: #"(?:logs?|function)\s+(\S+)"#),
+          "FLAGS": SlotDefinition(type: .string, defaultValue: ""),
+        ],
+        discriminators: ["logs", "tail", "stream", "view"]
+      ),
+      CommandTemplate(
+        id: "sam_init",
+        intents: [
+          "sam init", "create sam project", "new sam application",
+          "aws sam init", "scaffold sam app",
+          "initialize sam project",
+        ],
+        command: "sam init {FLAGS}",
+        slots: [
+          "FLAGS": SlotDefinition(type: .string, defaultValue: ""),
+        ],
+        discriminators: ["init", "create", "new", "scaffold", "initialize"]
+      ),
+
+      // MARK: Serverless Framework
+
+      CommandTemplate(
+        id: "serverless_deploy",
+        intents: [
+          "serverless deploy", "sls deploy", "deploy serverless app",
+          "deploy with serverless framework", "serverless push",
+          "sls deploy to production", "deploy serverless stack",
+        ],
+        command: "serverless deploy {FLAGS}",
+        slots: [
+          "FLAGS": SlotDefinition(type: .string, defaultValue: ""),
+        ],
+        negativeKeywords: ["kubernetes", "docker", "cloudflare", "worker", "sam", "ansible"],
+        discriminators: ["serverless", "sls"]
+      ),
+      CommandTemplate(
+        id: "serverless_invoke",
+        intents: [
+          "serverless invoke", "sls invoke", "invoke serverless function",
+          "call serverless function", "test serverless function",
+          "sls invoke local",
+        ],
+        command: "serverless invoke {FLAGS} -f {FUNCTION}",
+        slots: [
+          "FUNCTION": SlotDefinition(type: .string,
+            extractPattern: #"(?:invoke|function)\s+(\S+)"#),
+          "FLAGS": SlotDefinition(type: .string, defaultValue: "--local"),
+        ],
+        discriminators: ["invoke", "call", "test"]
+      ),
+      CommandTemplate(
+        id: "serverless_logs",
+        intents: [
+          "serverless logs", "sls logs", "view serverless logs",
+          "tail serverless function logs", "serverless log output",
+          "stream serverless logs",
+        ],
+        command: "serverless logs -f {FUNCTION} --tail {FLAGS}",
+        slots: [
+          "FUNCTION": SlotDefinition(type: .string,
+            extractPattern: #"(?:logs?|function)\s+(\S+)"#),
+          "FLAGS": SlotDefinition(type: .string, defaultValue: ""),
+        ],
+        discriminators: ["logs", "tail", "stream", "output"]
+      ),
+      CommandTemplate(
+        id: "serverless_remove",
+        intents: [
+          "serverless remove", "sls remove", "tear down serverless stack",
+          "delete serverless deployment", "remove serverless service",
+          "serverless destroy",
+        ],
+        command: "serverless remove {FLAGS}",
+        slots: [
+          "FLAGS": SlotDefinition(type: .string, defaultValue: ""),
+        ],
+        negativeKeywords: ["file", "files", "log", "directory", "folder", "old"],
+        discriminators: ["serverless", "sls", "stack", "deployment"]
+      ),
+      CommandTemplate(
+        id: "serverless_info",
+        intents: [
+          "serverless info", "sls info", "serverless service info",
+          "show serverless deployment info", "serverless status",
+          "what's deployed serverless",
+        ],
+        command: "serverless info {FLAGS}",
+        slots: [
+          "FLAGS": SlotDefinition(type: .string, defaultValue: ""),
+        ],
+        discriminators: ["info", "status", "deployed"]
+      ),
+      CommandTemplate(
+        id: "serverless_offline",
+        intents: [
+          "serverless offline", "sls offline", "run serverless locally",
+          "start serverless offline", "local serverless dev",
+          "serverless local development",
+        ],
+        command: "serverless offline {FLAGS}",
+        slots: [
+          "FLAGS": SlotDefinition(type: .string, defaultValue: ""),
+        ],
+        discriminators: ["offline", "local", "locally", "development"]
       ),
     ]
   )
@@ -2005,7 +2492,8 @@ public enum BuiltInTemplates {
             extractPattern: #"(?:duration|for|length)\s+(\d[\d:\.]+)"#),
           "OUTPUT": SlotDefinition(type: .path,
             extractPattern: #"(?:to|as|output)\s+(\S+)"#),
-        ]
+        ],
+        discriminators: ["trim", "cut", "clip", "shorten", "segment"]
       ),
       CommandTemplate(
         id: "ffmpeg_gif",
@@ -2034,7 +2522,8 @@ public enum BuiltInTemplates {
         slots: [
           "INPUT": SlotDefinition(type: .path,
             extractPattern: #"(?:info|details|metadata)\s+(?:of|for|about)?\s*(\S+)"#),
-        ]
+        ],
+        discriminators: ["info", "metadata", "details", "duration", "format", "ffprobe"]
       ),
       CommandTemplate(
         id: "magick_convert",
@@ -2286,6 +2775,8 @@ public enum BuiltInTemplates {
           "watch command output", "repeat command periodically",
           "monitor command", "watch changes",
           "run every n seconds and show",
+          "run command every seconds", "watch every seconds",
+          "run periodically", "execute every interval",
         ],
         command: "while true; do clear; {COMMAND}; sleep {INTERVAL}; done",
         slots: [
@@ -2293,7 +2784,9 @@ public enum BuiltInTemplates {
             extractPattern: #"(?:watch|monitor|run)\s+(.+?)(?:\s+every)"#),
           "INTERVAL": SlotDefinition(type: .number, defaultValue: "2",
             extractPattern: #"(?:every)\s+(\d+)"#),
-        ]
+        ],
+        negativeKeywords: ["git", "diff", "staged", "status", "commit", "branch"],
+        discriminators: ["every", "seconds", "periodically", "repeat", "interval"]
       ),
     ]
   )

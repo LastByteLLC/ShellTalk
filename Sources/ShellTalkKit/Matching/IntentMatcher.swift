@@ -52,6 +52,180 @@ public final class IntentMatcher: Sendable {
   /// Match a user query to the best command template.
   /// Returns nil if no match exceeds the confidence threshold.
   public func match(_ query: String) -> IntentMatchResult? {
+    let normalized = TemplateStore.normalize(query)
+    guard !normalized.isEmpty else { return nil }
+
+    // Fast path 1: Exact match shortcut
+    if let result = tryExactMatch(normalized) {
+      return result
+    }
+
+    // Fast path 2: Command-prefix match
+    if let result = tryCommandPrefixMatch(query: query, normalized: normalized) {
+      return result
+    }
+
+    // Standard path: Two-level BM25 matching
+    return bm25Match(query)
+  }
+
+  // MARK: - Fast Path: Exact Match
+
+  /// Check the exact match index for short/canonical queries.
+  /// Only matches when the full normalized query is in the index.
+  private func tryExactMatch(_ normalized: String) -> IntentMatchResult? {
+    // Only use exact match for short queries (≤ 4 words)
+    // Longer queries need BM25 to consider all tokens
+    let wordCount = normalized.split(separator: " ").count
+    guard wordCount <= 4 else { return nil }
+
+    guard let templateId = store.exactMatchIndex[normalized],
+          let (categoryId, template) = lookupTemplate(templateId) else { return nil }
+    return IntentMatchResult(
+      categoryId: categoryId,
+      categoryScore: 1.0,
+      templateId: templateId,
+      templateScore: 1.0,
+      embeddingScore: nil,
+      template: template
+    )
+  }
+
+  // MARK: - Fast Path: Command-Prefix Match
+
+  /// When the first token of the query is a known shell command with few candidate
+  /// templates (≤ 4), restrict search to those templates using discriminator logic.
+  /// For commands with many templates (like "git"), fall through to BM25.
+  private func tryCommandPrefixMatch(query: String, normalized: String) -> IntentMatchResult? {
+    let words = normalized.split(separator: " ").map(String.init)
+    guard words.count >= 2 else { return nil }
+
+    // Try two-token prefix first (e.g., "aws s3", "git stash"), then single-token
+    let prefixesToTry: [String]
+    if words.count >= 2 {
+      prefixesToTry = [words[0] + " " + words[1], words[0]]
+    } else {
+      prefixesToTry = [words[0]]
+    }
+
+    for prefix in prefixesToTry {
+      // For two-word prefixes, check exact match index first
+      if prefix.contains(" ") {
+        if store.exactMatchIndex[normalized] != nil {
+          // Already handled by exact match — skip
+          continue
+        }
+      }
+
+      let firstToken = prefix.split(separator: " ").first.map(String.init) ?? prefix
+      guard let candidateIds = store.commandPrefixIndex[firstToken] else { continue }
+
+      // Only use command-prefix for small candidate sets (≤ 5 templates)
+      // Larger sets (like "git" with 20 templates) need BM25 discrimination
+      guard candidateIds.count <= 5, candidateIds.count >= 1 else { continue }
+
+      // Single candidate — use it directly if the first token is the actual
+      // command name AND no negative keywords are present in the query
+      if candidateIds.count == 1 {
+        let candidateId = candidateIds[0]
+        guard let (categoryId, template) = lookupTemplate(candidateId) else { continue }
+        // Verify the first token matches the start of the actual command
+        let cmdPrefix = TemplateStore.extractCommandPrefix(template.command)
+        let cmdFirstToken = cmdPrefix.lowercased().split(separator: " ").first.map(String.init)
+        if cmdFirstToken == firstToken {
+          // Check negative keywords before short-circuiting
+          if let negatives = template.negativeKeywords {
+            let queryWords = Set(words)
+            let hasNegative = negatives.contains { queryWords.contains($0.lowercased()) }
+            if hasNegative {
+              // Negative keyword present — fall through to BM25
+              continue
+            }
+          }
+          return IntentMatchResult(
+            categoryId: categoryId,
+            categoryScore: 1.0,
+            templateId: candidateId,
+            templateScore: 0.9,
+            embeddingScore: nil,
+            template: template
+          )
+        }
+        // First token doesn't match actual command — fall through to BM25
+        continue
+      }
+
+      // Flag-aware matching: if query has flag-like tokens (starting with "-"),
+      // check which template's command string contains those flags
+      let queryFlags = words.filter { $0.hasPrefix("-") }
+      if !queryFlags.isEmpty, candidateIds.count >= 2 {
+        var bestFlagMatch: (id: String, template: CommandTemplate, matchCount: Int)?
+        for candidateId in candidateIds {
+          guard let (_, template) = lookupTemplate(candidateId) else { continue }
+          let cmdLower = template.command.lowercased()
+          let matchCount = queryFlags.filter { cmdLower.contains($0) }.count
+          if matchCount > 0 {
+            if bestFlagMatch == nil || matchCount > bestFlagMatch!.matchCount {
+              bestFlagMatch = (candidateId, template, matchCount)
+            }
+          }
+        }
+        if let flagMatch = bestFlagMatch,
+           let (categoryId, _) = lookupTemplate(flagMatch.id) {
+          return IntentMatchResult(
+            categoryId: categoryId,
+            categoryScore: 1.0,
+            templateId: flagMatch.id,
+            templateScore: 0.95,
+            embeddingScore: nil,
+            template: flagMatch.template
+          )
+        }
+      }
+
+      let queryTokensLower = Set(words)
+
+      // Multiple candidates — check discriminators
+      var discriminatorMatch: (id: String, template: CommandTemplate)?
+      var defaultCandidate: (id: String, template: CommandTemplate)?
+
+      for candidateId in candidateIds {
+        guard let (_, template) = lookupTemplate(candidateId) else { continue }
+
+        if let discriminators = template.discriminators {
+          let hasDiscriminator = discriminators.contains { disc in
+            queryTokensLower.contains(disc.lowercased()) ||
+            normalized.contains(disc.lowercased())
+          }
+          if hasDiscriminator && discriminatorMatch == nil {
+            discriminatorMatch = (candidateId, template)
+          }
+        } else if defaultCandidate == nil {
+          defaultCandidate = (candidateId, template)
+        }
+      }
+
+      // Prefer discriminator match, then default
+      let winner = discriminatorMatch ?? defaultCandidate
+      guard let (winnerId, winnerTemplate) = winner,
+            let (categoryId, _) = lookupTemplate(winnerId) else { continue }
+
+      return IntentMatchResult(
+        categoryId: categoryId,
+        categoryScore: 1.0,
+        templateId: winnerId,
+        templateScore: 0.9,
+        embeddingScore: nil,
+        template: winnerTemplate
+      )
+    }
+
+    return nil
+  }
+
+  // MARK: - Standard Path: BM25
+
+  private func bm25Match(_ query: String) -> IntentMatchResult? {
     // Level 1: Category matching
     let categoryResults = store.matchCategories(query, topK: config.topCategories)
     guard !categoryResults.isEmpty else { return nil }
@@ -73,6 +247,9 @@ public final class IntentMatcher: Sendable {
     }
 
     guard !candidates.isEmpty else { return nil }
+
+    // Apply negative keyword penalties
+    candidates = applyNegativeKeywordPenalties(candidates: candidates, query: query)
 
     // Optional: Rerank BM25 candidates with embeddings (lazy — only embed candidates)
     if embedding.isAvailable, config.useEmbeddings, let queryVec = embedding.embed(query) {
@@ -98,6 +275,44 @@ public final class IntentMatcher: Sendable {
       embeddingScore: nil,
       template: template
     )
+  }
+
+  // MARK: - Negative Keyword Penalties
+
+  /// Penalize candidates whose templates have negative keywords matching the query.
+  private func applyNegativeKeywordPenalties(
+    candidates: [(category: String, categoryScore: Double, template: BM25Result)],
+    query: String
+  ) -> [(category: String, categoryScore: Double, template: BM25Result)] {
+    let queryTokens = Set(BM25.tokenize(query))
+
+    return candidates.map { candidate in
+      guard let template = store.template(byId: candidate.template.documentId),
+            let negatives = template.negativeKeywords else { return candidate }
+
+      var penalty = 1.0
+      for neg in negatives {
+        if queryTokens.contains(neg.lowercased()) {
+          penalty *= 0.3
+        }
+      }
+      guard penalty < 1.0 else { return candidate }
+
+      let penalizedResult = BM25Result(
+        documentId: candidate.template.documentId,
+        score: candidate.template.score * penalty
+      )
+      return (candidate.category, candidate.categoryScore, penalizedResult)
+    }
+  }
+
+  // MARK: - Helpers
+
+  private func lookupTemplate(_ id: String) -> (String, CommandTemplate)? {
+    guard let (categoryId, template) = store.category(forTemplateId: id).flatMap({ catId in
+      store.template(byId: id).map { (catId, $0) }
+    }) else { return nil }
+    return (categoryId, template)
   }
 
   /// Return top-N matches (for debug/disambiguation).

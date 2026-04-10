@@ -20,12 +20,19 @@ public final class TemplateStore: Sendable {
   /// Quick lookup: template ID → (category ID, template).
   private let templateMap: [String: (String, CommandTemplate)]
 
+  /// Exact match index: normalized short phrase → template ID.
+  /// Covers all intents ≤ 4 words, template IDs as phrases, and command prefixes.
+  public let exactMatchIndex: [String: String]
+
+  /// Command-prefix index: first command token → [template IDs].
+  /// Used when the first word of the query is a known shell command.
+  public let commandPrefixIndex: [String: [String]]
+
   public init(categories: [TemplateCategory]) {
     self.categories = categories
 
     // Build category-level BM25 index
     let categoryDocs = categories.map { cat in
-      // Combine category name, description, and all template intents for category matching
       let intentText = cat.templates.flatMap(\.intents).joined(separator: " ")
       return BM25Document(id: cat.id, text: "\(cat.name) \(cat.description) \(intentText)")
     }
@@ -50,6 +57,97 @@ public final class TemplateStore: Sendable {
       }
     }
     self.templateMap = map
+
+    // Build exact match index
+    var exact: [String: String] = [:]
+    for cat in categories {
+      for template in cat.templates {
+        // Add short intents (≤ 3 words after normalization)
+        for intent in template.intents {
+          let normalized = Self.normalize(intent)
+          let wordCount = normalized.split(separator: " ").count
+          if wordCount >= 1 && wordCount <= 3 && !normalized.isEmpty {
+            // Only add if no conflict, or prefer template with shorter command
+            if let existing = exact[normalized],
+               let existingTemplate = map[existing]?.1 {
+              let existingCmdLen = existingTemplate.command.replacingOccurrences(
+                of: #"\{[A-Z_]+\}"#, with: "", options: .regularExpression).count
+              let newCmdLen = template.command.replacingOccurrences(
+                of: #"\{[A-Z_]+\}"#, with: "", options: .regularExpression).count
+              if newCmdLen < existingCmdLen {
+                exact[normalized] = template.id
+              }
+            } else {
+              exact[normalized] = template.id
+            }
+          }
+        }
+        // Add template ID as phrase: "git_status" → "git status"
+        let idPhrase = template.id.replacingOccurrences(of: "_", with: " ")
+        if exact[idPhrase] == nil {
+          exact[idPhrase] = template.id
+        }
+        // Add command prefix (up to first slot placeholder)
+        let cmdPrefix = Self.extractCommandPrefix(template.command)
+        if !cmdPrefix.isEmpty && cmdPrefix.split(separator: " ").count <= 3 {
+          let normalizedPrefix = Self.normalize(cmdPrefix)
+          if exact[normalizedPrefix] == nil {
+            exact[normalizedPrefix] = template.id
+          }
+        }
+      }
+    }
+    self.exactMatchIndex = exact
+
+    // Build command-prefix index
+    var cmdPrefixes: [String: [String]] = [:]
+    for cat in categories {
+      for template in cat.templates {
+        let prefix = Self.extractCommandPrefix(template.command)
+        guard !prefix.isEmpty else { continue }
+        let firstToken = prefix.split(separator: " ").first.map(String.init) ?? prefix
+        let normalized = firstToken.lowercased()
+        cmdPrefixes[normalized, default: []].append(template.id)
+      }
+    }
+    // Add templates whose commands start with platform slots that resolve to
+    // known command names. E.g., open_file uses {OPEN_CMD} which becomes "open".
+    let platformSlotCommands: [String: String] = [
+      "OPEN_CMD": "open",    // macOS: open, Linux: xdg-open
+    ]
+    for cat in categories {
+      for template in cat.templates {
+        let cmd = template.command
+        guard let first = cmd.split(separator: " ").first,
+              first.hasPrefix("{"), first.hasSuffix("}") else { continue }
+        let slotName = String(first.dropFirst().dropLast())
+        if let resolved = platformSlotCommands[slotName] {
+          if !cmdPrefixes[resolved, default: []].contains(template.id) {
+            cmdPrefixes[resolved, default: []].append(template.id)
+          }
+        }
+      }
+    }
+    self.commandPrefixIndex = cmdPrefixes
+  }
+
+  /// Normalize a string for exact matching: lowercase, trim, collapse whitespace.
+  static func normalize(_ text: String) -> String {
+    text.lowercased()
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+      .components(separatedBy: .whitespacesAndNewlines)
+      .filter { !$0.isEmpty }
+      .joined(separator: " ")
+  }
+
+  /// Extract the command prefix from a template command string (up to first slot placeholder).
+  static func extractCommandPrefix(_ command: String) -> String {
+    var result: [String] = []
+    for token in command.split(separator: " ") {
+      if token.contains("{") { break }
+      result.append(String(token))
+    }
+    return result.joined(separator: " ")
   }
 
   /// Look up a template by ID.

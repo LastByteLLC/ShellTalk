@@ -32,7 +32,8 @@ public struct SlotExtractor: Sendable {
     for (name, definition) in slots {
       // Strategy 1: Regex extraction pattern (most precise, template-author-designed)
       if let pattern = definition.extractPattern,
-         let value = extractByRegex(pattern: pattern, from: query) {
+         let value = extractByRegex(pattern: pattern, from: query),
+         !isNoiseValue(value, type: definition.type) {
         extracted[name] = sanitize(value, type: definition.type)
         continue
       }
@@ -47,7 +48,8 @@ public struct SlotExtractor: Sendable {
       }
 
       // Strategy 3: Type-specific heuristic extraction
-      if let value = extractByType(definition.type, from: query, slotName: name) {
+      if let value = extractByType(definition.type, from: query, slotName: name),
+         !isNoiseValue(value, type: definition.type) {
         extracted[name] = value
         continue
       }
@@ -58,8 +60,74 @@ public struct SlotExtractor: Sendable {
       }
     }
 
+    // Post-extraction validation: replace noise values with defaults
+    for (name, value) in extracted {
+      guard let definition = slots[name] else { continue }
+      if isNoiseValue(value, type: definition.type) {
+        if let defaultValue = definition.defaultValue {
+          extracted[name] = defaultValue
+        } else {
+          extracted.removeValue(forKey: name)
+        }
+      }
+    }
+
     return extracted
   }
+
+  // MARK: - Noise Detection
+
+  /// Check if an extracted value is a noise word that shouldn't be used as a slot value.
+  private func isNoiseValue(_ value: String, type: SlotType) -> Bool {
+    let lowered = value.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+
+    // Single stop words are never valid slot values
+    if Self.slotStopWords.contains(lowered) {
+      return true
+    }
+
+    // For PATH-type slots, also reject meta-nouns
+    if type == .path || type == .glob {
+      if Self.pathMetaNouns.contains(lowered) {
+        return true
+      }
+    }
+
+    // Numbers can't be paths
+    if type == .path, lowered.allSatisfy(\.isNumber) {
+      return true
+    }
+
+    // Short words without path separators are unlikely to be real paths
+    if type == .path, !lowered.contains("/"), !lowered.contains("."),
+       lowered.count <= 10 {
+      return true
+    }
+
+    return false
+  }
+
+  /// Words that should never be extracted as slot values.
+  static let slotStopWords: Set<String> = [
+    "the", "a", "an", "in", "of", "to", "at", "on", "for", "with",
+    "from", "by", "what", "how", "this", "that", "all", "my", "your",
+    "its", "our", "their", "me", "him", "her", "us", "them",
+    "is", "are", "was", "were", "be", "been", "being",
+    "do", "does", "did", "will", "would", "could", "should",
+    "have", "has", "had", "get", "got", "make", "made",
+    "just", "also", "very", "too", "here", "there", "now",
+    "up", "out", "about", "into", "over", "some", "more",
+    "every", "each", "both", "own", "such", "like",
+    "yes", "no", "not", "please", "yo", "bro", "dude",
+  ]
+
+  /// Meta-nouns that describe types, not entities — invalid as path values.
+  static let pathMetaNouns: Set<String> = [
+    "file", "files", "directory", "directories", "folder", "folders",
+    "command", "commands", "output", "input", "result", "results",
+    "change", "changes", "process", "package", "version",
+    "status", "info", "data", "archive", "image",
+  ]
 
   /// Legacy extraction without entities (backward compatible).
   public func extract(
