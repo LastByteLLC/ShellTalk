@@ -23,7 +23,7 @@ jobs:
       matrix:
         swift: ["6.0"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Build
         run: swift build
       - name: Test
@@ -37,7 +37,7 @@ jobs:
       matrix:
         swift: ["6.1-nightly"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Build
         run: swift build
       - name: Test
@@ -52,13 +52,16 @@ jobs:
     runs-on: ubuntu-latest
     container: swift:6.3-jammy
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Swift SDK for WASM
         run: >-
           swift sdk install
           https://github.com/swiftwasm/swift/releases/download/swift-wasm-6.3-RELEASE/swift-wasm-6.3-RELEASE-wasm32-unknown-wasip1.artifactbundle.zip
           --checksum 6704d137e532f1ac31eafedd80658f9ee61239f2b6291216a02da32361ea9dcb
+
+      - name: Remove embedded SDK variant (no Foundation)
+        run: find ~/.swiftpm/swift-sdks -name 'embedded-swift-sdk.json' -delete
 
       - name: Verify SDK installed
         run: swift sdk list
@@ -74,7 +77,7 @@ jobs:
             -o Web/shelltalk.wasm
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           path: Web
 
