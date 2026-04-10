@@ -50,7 +50,7 @@ jobs:
   wasm:
     name: WebAssembly
     runs-on: ubuntu-latest
-    container: swiftlang/swift:nightly-6.1-jammy
+    container: swift:6.3-jammy
     steps:
       - uses: actions/checkout@v4
 
@@ -68,7 +68,7 @@ jobs:
 
       - name: Optimize WASM binary
         run: |
-          apt-get update && apt-get install -y binaryen
+          apt-get update -qq && apt-get install -y -qq binaryen > /dev/null
           wasm-opt -Oz --strip-debug --strip-producers \
             .build/wasm32-unknown-wasip1/release/shelltalk-wasm.wasm \
             -o Web/shelltalk.wasm

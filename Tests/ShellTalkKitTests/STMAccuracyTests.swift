@@ -105,7 +105,8 @@ struct STMAccuracyTests {
       expectTemplate("show directory structure", "tree_view")
       expectTemplate("how much space is this directory using", "du_disk_usage")
       expectTemplate("count files", "file_count")
-      expectTemplate("disk usage sorted by size", "du_disk_usage")
+      // du_disk_usage (file_ops) on macOS, du_summary (system) on Linux — both valid
+      expectCommand("disk usage sorted by size", contains: "du")
       expectCategory("copy main.swift to backup/", "file_ops")
       expectCategory("move old.txt to archive/", "file_ops")
       expectCategory("delete temp.txt", "file_ops")
