@@ -55,10 +55,13 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Swift SDK for WASM
-        run: swift sdk install swift-6.3-RELEASE_wasm
+        run: swift sdk install https://github.com/swiftwasm/swift/releases/download/swift-wasm-6.3-RELEASE/swift-wasm-6.3-RELEASE-wasm32-unknown-wasip1.artifactbundle.zip
+
+      - name: Verify SDK installed
+        run: swift sdk list
 
       - name: Build WASM binary
-        run: swift build --swift-sdk swift-6.3-RELEASE_wasm --product shelltalk-wasm -c release -Xswiftc -Osize
+        run: swift build --swift-sdk wasm32-unknown-wasip1 --product shelltalk-wasm -c release -Xswiftc -Osize
 
       - name: Optimize WASM binary
         run: |
