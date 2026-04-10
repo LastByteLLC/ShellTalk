@@ -1,0 +1,22 @@
+Generated 13020 examples across 58 labels
+Top labels:
+  ps_list: 264
+  tar_extract: 258
+  git_diff: 252
+  docker_ps: 247
+  git_push: 246
+  df_disk: 246
+  tail_file: 244
+  screencapture: 242
+  pbcopy: 242
+  grep_search: 240
+  git_pull: 240
+  env_vars: 239
+  brew_install: 237
+  wc_count: 237
+  find_by_extension: 236
+  ping_host: 235
+  git_log: 234
+  head_file: 233
+  curl_get: 233
+  ssh_connect: 230
