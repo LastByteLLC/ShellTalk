@@ -501,9 +501,9 @@ struct STMEval {
       for tc in cases {
         totalTests += 1; st += 1
 
-        let t0 = CFAbsoluteTimeGetCurrent()
+        let t0 = Date().timeIntervalSinceReferenceDate
         let r = pipe.process(tc.query)
-        let ms = (CFAbsoluteTimeGetCurrent() - t0) * 1000
+        let ms = (Date().timeIntervalSinceReferenceDate - t0) * 1000
 
         let isNeg = tc.expectedTemplateId == "_nil_"
         var tOk = false, cOk = false

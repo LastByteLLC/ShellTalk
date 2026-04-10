@@ -30,8 +30,7 @@ struct ShellTalkWASM {
       } else {
         print("{\"error\":\"no match\",\"query\":\"\(escapeJSON(query))\"}")
       }
-      // Flush stdout for streaming consumers
-      fflush(stdout)
+      // Flush stdout — print() already appends newline which triggers flush on most platforms
     }
   }
 
