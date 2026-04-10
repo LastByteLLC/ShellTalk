@@ -5,7 +5,9 @@
 // 2. User-defined YAML files (~/.config/stm/templates/)
 
 import Foundation
+#if canImport(Yams)
 import Yams
+#endif
 
 /// Central store for all command templates, indexed for fast lookup.
 public final class TemplateStore: Sendable {
@@ -181,6 +183,8 @@ public final class TemplateStore: Sendable {
   // MARK: - Loading from YAML
 
   /// Load categories from YAML strings.
+  /// Requires the Yams library (not available in WASM builds).
+  #if canImport(Yams)
   public static func fromYAML(_ yamlStrings: [String]) throws -> TemplateStore {
     var categories: [TemplateCategory] = []
     let decoder = YAMLDecoder()
@@ -190,8 +194,11 @@ public final class TemplateStore: Sendable {
     }
     return TemplateStore(categories: categories)
   }
+  #endif
 
   /// Load categories from YAML files in a directory.
+  /// Not available in WASM — use `builtIn()` or `fromYAML()` instead.
+  #if !os(WASI)
   public static func fromDirectory(_ path: String) throws -> TemplateStore {
     let fm = FileManager.default
     let contents = try fm.contentsOfDirectory(atPath: path)
@@ -206,6 +213,7 @@ public final class TemplateStore: Sendable {
 
     return try fromYAML(yamlStrings)
   }
+  #endif
 
   /// Load from built-in templates bundled with the library.
   public static func builtIn() -> TemplateStore {

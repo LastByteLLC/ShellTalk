@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ShellTalk — Natural Language to Shell Commands</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>ShellTalk</h1>
+      <p class="subtitle">Describe what you want to do. Get the shell command.</p>
+    </header>
+
+    <div class="input-area">
+      <div class="prompt-line">
+        <span class="prompt">$</span>
+        <input
+          type="text"
+          id="query-input"
+          placeholder="find all swift files..."
+          autocomplete="off"
+          autofocus
+        />
+      </div>
+    </div>
+
+    <div id="output-area" class="output-area">
+      <div id="loading" class="loading">Loading ShellTalk WASM module...</div>
+    </div>
+
+    <div class="examples">
+      <span class="examples-label">Try:</span>
+      <button class="example-btn" data-query="find swift files">find swift files</button>
+      <button class="example-btn" data-query="git status">git status</button>
+      <button class="example-btn" data-query="replace foo with bar in config.yaml">sed replace</button>
+      <button class="example-btn" data-query="show last 10 commits">git log</button>
+      <button class="example-btn" data-query="what's using port 8080">port check</button>
+      <button class="example-btn" data-query="compress the src directory">compress</button>
+      <button class="example-btn" data-query="deploy cloudflare worker">wrangler</button>
+      <button class="example-btn" data-query="sam deploy">SAM</button>
+    </div>
+
+    <footer>
+      <p>Powered by <a href="https://github.com/LastByteLLC/ShellTalk">ShellTalk</a> &mdash; deterministic NLP, no LLM, runs entirely in your browser via WebAssembly</p>
+    </footer>
+  </div>
+
+  <script src="shelltalk.js"></script>
+</body>
+</html>

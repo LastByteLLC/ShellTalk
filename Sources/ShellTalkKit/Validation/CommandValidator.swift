@@ -58,6 +58,9 @@ public struct CommandValidator: Sendable {
   // MARK: - Syntax Check
 
   private func checkSyntax(_ command: String) -> Bool {
+    #if os(WASI)
+    return true  // No shell available for syntax checking in WASM
+    #else
     let process = Process()
     #if os(Linux)
     let shellPath = "/bin/sh"
@@ -76,6 +79,7 @@ public struct CommandValidator: Sendable {
     } catch {
       return false
     }
+    #endif
   }
 
   // MARK: - Command Existence
@@ -111,6 +115,9 @@ public struct CommandValidator: Sendable {
   // MARK: - Path Check
 
   private func checkPaths(_ command: String) -> Bool {
+    #if os(WASI)
+    return true  // No filesystem access in WASM
+    #else
     // Extract potential file paths from the command
     let tokens = command.split(separator: " ").map(String.init)
     let fm = FileManager.default
@@ -129,11 +136,11 @@ public struct CommandValidator: Sendable {
         if fm.fileExists(atPath: expanded) { continue }
         let parent = (expanded as NSString).deletingLastPathComponent
         if !parent.isEmpty && fm.fileExists(atPath: parent) { continue }
-        // Path doesn't exist and parent doesn't exist — suspicious but not fatal
       }
     }
 
     return true  // Path check is advisory, not blocking
+    #endif
   }
 
   // MARK: - Safety Classification

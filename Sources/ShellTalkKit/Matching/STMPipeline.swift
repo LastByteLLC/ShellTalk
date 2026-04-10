@@ -80,7 +80,7 @@ public final class STMPipeline: Sendable {
     store: TemplateStore? = nil,
     config: PipelineConfig = .default
   ) {
-    let initStart = ContinuousClock.now
+    let initStart = PipelineTimer.now()
     let prof = profile ?? SystemProfile.detect()
     let st = store ?? TemplateStore.builtIn()
 
@@ -97,21 +97,21 @@ public final class STMPipeline: Sendable {
   /// Convert a natural language query to a bash command.
   /// Returns nil if no template matches with sufficient confidence.
   public func process(_ query: String) -> PipelineResult? {
-    let pipelineStart = ContinuousClock.now
+    let pipelineStart = PipelineTimer.now()
     var timings: [StageTiming] = []
 
     // Step 0: Recognize entities
-    var t0 = ContinuousClock.now
+    var t0 = PipelineTimer.now()
     let entities = recognizer.recognize(query)
     timings.append(StageTiming(name: "entities", elapsedMs: t0.elapsedMs()))
 
     // Step 1: Match intent
-    t0 = ContinuousClock.now
+    t0 = PipelineTimer.now()
     guard let match = matcher.match(query) else { return nil }
     timings.append(StageTiming(name: "match", elapsedMs: t0.elapsedMs()))
 
     // Step 2: Extract slots (entity-aware)
-    t0 = ContinuousClock.now
+    t0 = PipelineTimer.now()
     let slots = extractor.extract(
       from: query,
       slots: match.template.slots,
@@ -121,19 +121,19 @@ public final class STMPipeline: Sendable {
     timings.append(StageTiming(name: "extract", elapsedMs: t0.elapsedMs()))
 
     // Step 3: Resolve template
-    t0 = ContinuousClock.now
+    t0 = PipelineTimer.now()
     let command = resolver.resolve(template: match.template, extractedSlots: slots)
     timings.append(StageTiming(name: "resolve", elapsedMs: t0.elapsedMs()))
 
     // Step 4: Validate (optional)
-    t0 = ContinuousClock.now
+    t0 = PipelineTimer.now()
     let validation = config.validateCommands ? validator.validate(command) : nil
     timings.append(StageTiming(name: "validate", elapsedMs: t0.elapsedMs()))
 
     // Step 5: Debug info (optional)
     let debug: DebugInfo?
     if config.includeDebugInfo {
-      t0 = ContinuousClock.now
+      t0 = PipelineTimer.now()
       let topMatches = matcher.matchTopN(query, n: 5)
       let platformSlots = resolvePlatformSlotsUsed(in: match.template.command)
       timings.append(StageTiming(name: "debug", elapsedMs: t0.elapsedMs()))
@@ -213,13 +213,26 @@ public final class STMPipeline: Sendable {
   }
 }
 
-// MARK: - ContinuousClock Timing Helper
+// MARK: - Cross-Platform Timing Helper
 
-extension ContinuousClock.Instant {
-  /// Milliseconds elapsed since this instant.
+#if os(WASI)
+/// Lightweight timing wrapper for platforms without ContinuousClock.
+struct PipelineTimer {
+  private let start: Double
+  init() { self.start = 0 }  // No high-res timer in WASI
+  func elapsedMs() -> Double { 0 }
+  static func now() -> PipelineTimer { PipelineTimer() }
+}
+#else
+/// Timing wrapper using ContinuousClock.
+struct PipelineTimer {
+  private let instant: ContinuousClock.Instant
+  private init(_ instant: ContinuousClock.Instant) { self.instant = instant }
   func elapsedMs() -> Double {
-    let elapsed = ContinuousClock.now - self
+    let elapsed = ContinuousClock.now - instant
     return Double(elapsed.components.seconds) * 1000.0
       + Double(elapsed.components.attoseconds) / 1_000_000_000_000_000.0
   }
+  static func now() -> PipelineTimer { PipelineTimer(.now) }
 }
+#endif

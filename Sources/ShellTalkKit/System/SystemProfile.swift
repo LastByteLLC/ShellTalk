@@ -65,7 +65,22 @@ extension SystemProfile {
 
   /// Auto-detect the current machine profile.
   /// Fast path (~15ms): skips version probing. Use `detect(full:)` for versions.
+  /// On WASI/WASM, returns a minimal stub profile (no subprocess access).
   public static func detect(full: Bool = false) -> SystemProfile {
+    #if os(WASI)
+    return SystemProfile(
+      os: .unknown,
+      arch: "wasm32",
+      osVersion: "wasi",
+      shell: .sh,
+      packageManager: .unknown,
+      availableCommands: [],
+      commandPaths: [:],
+      commandVersions: [:],
+      gnuOverrides: [:],
+      missingAlternatives: [:]
+    )
+    #else
     let os = detectOS()
     let arch = run("uname", "-m") ?? "unknown"
     let osVersion = detectOSVersion(os: os)
@@ -91,7 +106,10 @@ extension SystemProfile {
       gnuOverrides: gnu,
       missingAlternatives: missing
     )
+    #endif
   }
+
+  #if !os(WASI)
 
   // MARK: - OS Detection
 
@@ -268,10 +286,12 @@ extension SystemProfile {
     return missing
   }
 
+  #endif // !os(WASI) — end detection methods
+
   // MARK: - Helpers
 
+  #if !os(WASI)
   private static func which(_ command: String) -> String? {
-    // Use /usr/bin/env to find 'which' portably across platforms
     run("which", command)
   }
 
@@ -296,6 +316,7 @@ extension SystemProfile {
       return nil
     }
   }
+  #endif
 
   private static func extractFirst(pattern: String, from text: String) -> String? {
     guard let regex = try? NSRegularExpression(pattern: pattern),

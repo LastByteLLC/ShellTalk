@@ -55,6 +55,7 @@ public struct SafeShell: Sendable {
   }
 
   /// Execute a shell command with safety checks and timeout.
+  /// On WASI/WASM, execution is unavailable — throws `.blocked`.
   public func execute(_ command: String, timeout: TimeInterval? = nil) throws -> ShellResult {
     // Safety check
     let lower = command.lowercased()
@@ -64,6 +65,9 @@ public struct SafeShell: Sendable {
       }
     }
 
+    #if os(WASI)
+    throw ShellError.blocked("Command execution unavailable in WASM sandbox")
+    #else
     let process = Process()
     let stdoutPipe = Pipe()
     let stderrPipe = Pipe()
@@ -101,17 +105,19 @@ public struct SafeShell: Sendable {
       stderr: String(data: stderrData, encoding: .utf8)?.trimmingCharacters(in: .newlines) ?? "",
       exitCode: process.terminationStatus
     )
+    #endif
   }
 
+  #if !os(WASI)
   /// Shell path — use /bin/sh on Linux for maximum portability, /bin/bash on macOS.
   static let shellPath: String = {
     #if os(Linux)
-    // /bin/sh exists on all POSIX systems; bash may not be installed (e.g., Alpine)
     return "/bin/sh"
     #else
     return "/bin/bash"
     #endif
   }()
+  #endif
 
   static let blockedPatterns: [String] = [
     "rm -rf /", "rm -rf ~", "rm -rf $home",
