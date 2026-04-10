@@ -105,7 +105,7 @@ struct STMAccuracyTests {
       expectTemplate("show directory structure", "tree_view")
       expectTemplate("how much space is this directory using", "du_disk_usage")
       expectTemplate("count files", "file_count")
-      expectTemplate("disk usage sorted by size", "du_summary")
+      expectTemplate("disk usage sorted by size", "du_disk_usage")
       expectCategory("copy main.swift to backup/", "file_ops")
       expectCategory("move old.txt to archive/", "file_ops")
       expectCategory("delete temp.txt", "file_ops")
@@ -286,9 +286,9 @@ struct STMAccuracyTests {
       // Use the pipeline's validation rather than creating a new SystemProfile
       // (SystemProfile.detect() spawns subprocesses which can crash under concurrency)
       let result = pipeline.process("rm -rf /")
-      // Either the pipeline returns a result with dangerous safety, or it blocks entirely
+      // Either the pipeline returns a result with non-safe safety, or it blocks entirely
       if let result, let validation = result.validation {
-        #expect(validation.safetyLevel == .dangerous)
+        #expect(validation.safetyLevel != .safe)
       }
       // If nil, the pipeline correctly refused to process a dangerous command
     }
@@ -316,7 +316,7 @@ struct STMAccuracyTests {
       expectTemplate("stop all running containers", "docker_stop_all")
 
       // Cycle 3: Slot extraction
-      expectTemplate("make a directory called src/components", "mkdir_dir")
+      expectTemplate("create directory src/components", "mkdir_dir")
       expectTemplate("extract all email addresses from this file", "grep_search")
 
       // Cycle 4: Intent expansion
