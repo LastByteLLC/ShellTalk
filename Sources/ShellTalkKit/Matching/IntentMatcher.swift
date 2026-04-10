@@ -397,6 +397,40 @@ public final class IntentMatcher: Sendable {
       }
     }
 
+    // TF-IDF hybrid: boost BM25 candidates that have high TF-IDF similarity,
+    // and inject candidates BM25 missed entirely.
+    let tfidfResults = store.tfidfIndex.search(query, topK: 5)
+    let tfidfScores = Dictionary(uniqueKeysWithValues: tfidfResults.map { ($0.templateId, $0.score) })
+
+    // Boost existing BM25 candidates by their TF-IDF similarity
+    candidates = candidates.map { candidate in
+      if let tfidfScore = tfidfScores[candidate.template.documentId], tfidfScore > 0.15 {
+        let boost = 1.0 + Double(tfidfScore) * 0.5
+        return (
+          candidate.category,
+          candidate.categoryScore * boost,
+          BM25Result(documentId: candidate.template.documentId, score: candidate.template.score * boost)
+        )
+      }
+      return candidate
+    }
+
+    // Inject TF-IDF-only candidates (not already in BM25 list) with conservative scoring
+    for tfidf in tfidfResults {
+      let alreadyCandidate = candidates.contains { $0.template.documentId == tfidf.templateId }
+      if !alreadyCandidate, tfidf.score > 0.3 {
+        if let catId = store.category(forTemplateId: tfidf.templateId) {
+          let syntheticTemplateScore = Double(tfidf.score) * 3.0
+          let syntheticCategoryScore = Double(tfidf.score) * 2.0
+          candidates.append((
+            category: catId,
+            categoryScore: syntheticCategoryScore,
+            template: BM25Result(documentId: tfidf.templateId, score: syntheticTemplateScore)
+          ))
+        }
+      }
+    }
+
     guard !candidates.isEmpty else { return nil }
 
     // Apply negative keyword penalties

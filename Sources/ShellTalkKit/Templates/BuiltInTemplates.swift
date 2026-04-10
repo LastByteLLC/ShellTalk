@@ -51,6 +51,10 @@ public enum BuiltInTemplates {
           "list all files named", "list files matching", "list files called",
           "show all files named", "find DS_Store files", "find dotfiles",
           "find hidden files named", "find files starting with dot",
+          "where is the file", "locate file", "search for file named",
+          "find a file called", "look for file named",
+          "search for config files", "where is package.json",
+          "find the nearest file", "find file by name",
         ],
         command: "find {PATH} -name '{PATTERN}' -type f",
         slots: [
@@ -81,6 +85,10 @@ public enum BuiltInTemplates {
           "files changed in the last week", "find files modified recently",
           "find recent files", "what files changed today",
           "show recently edited files",
+          "find files modified yesterday", "files changed recently",
+          "which files were modified", "which file was modified most recently",
+          "most recently changed files", "latest modified files",
+          "which files did I change today", "files I edited today",
         ],
         command: "find {PATH} -type f -mtime -{DAYS}",
         slots: [
@@ -173,6 +181,11 @@ public enum BuiltInTemplates {
           "disk usage", "directory size", "folder size",
           "how much space", "du", "show disk usage",
           "what's using space", "size of directory",
+          "how big is this directory", "how big is this folder",
+          "how large is this directory", "directory disk usage",
+          "size of this folder", "folder disk usage",
+          "disk usage of directory", "how much space does this use",
+          "space used by directory",
         ],
         command: "du -sh {PATH}",
         slots: [
@@ -274,6 +287,10 @@ public enum BuiltInTemplates {
           "make executable", "chmod +x", "add execute permission",
           "make file executable", "set executable",
           "add executable permission", "mark as executable",
+          "make runnable", "make script runnable",
+          "make this script executable", "allow execution",
+          "set execute bit", "give execute rights",
+          "make it executable", "add run permission",
         ],
         command: "chmod +x {FILE}",
         slots: [
@@ -356,6 +373,10 @@ public enum BuiltInTemplates {
           "git diff", "show diff", "what's different",
           "show changes in detail", "compare changes",
           "show modifications", "view diff",
+          "what changed", "what has changed since last commit",
+          "show me the changes", "diff since last commit",
+          "what did I change", "show code changes",
+          "view the differences", "show me the diff",
         ],
         command: "git diff {FLAGS} {PATH}",
         slots: [
@@ -380,6 +401,9 @@ public enum BuiltInTemplates {
           "last commits", "git history", "show log",
           "view commits", "history of commits", "commit history",
           "show git log", "log of changes",
+          "git log with file changes", "git log with diffs",
+          "show what files changed in each commit",
+          "commit log with stats", "log with patches",
         ],
         command: "git log --oneline -n {COUNT}",
         slots: [
@@ -450,6 +474,10 @@ public enum BuiltInTemplates {
         intents: [
           "switch branch", "checkout branch", "change branch",
           "go to branch", "git switch", "git checkout",
+          "check out branch", "switch to branch",
+          "change to branch", "move to branch",
+          "go to the branch", "hop to branch",
+          "checkout the branch", "check out the branch",
         ],
         command: "git switch {BRANCH}",
         slots: [
@@ -600,6 +628,10 @@ public enum BuiltInTemplates {
           "git reset", "reset to commit", "unstage files",
           "undo last commit", "reset head",
           "git reset hard", "discard commits",
+          "roll back to previous commit", "roll back commit",
+          "go back to previous commit", "undo commits",
+          "reset to previous state", "rewind commits",
+          "go back one commit", "step back a commit",
         ],
         command: "git reset {FLAGS} {REF}",
         slots: [
@@ -616,6 +648,10 @@ public enum BuiltInTemplates {
           "undo all changes", "undo uncommitted changes",
           "discard all modifications", "restore working tree",
           "revert uncommitted changes", "checkout all files",
+          "throw away changes", "reset my changes",
+          "get rid of changes", "drop all modifications",
+          "clean working directory", "undo local changes",
+          "discard local modifications", "restore files to last commit",
         ],
         command: "git restore {PATH}",
         slots: [
@@ -768,6 +804,10 @@ public enum BuiltInTemplates {
         intents: [
           "delete lines matching", "remove lines containing",
           "sed delete", "strip lines with",
+          "remove blank lines", "delete empty lines",
+          "strip blank lines", "remove lines with pattern",
+          "delete lines with", "filter out lines matching",
+          "remove lines from file", "clean blank lines",
         ],
         command: "{SED} {SED_INPLACE} '/{PATTERN}/d' {FILE}",
         slots: [
@@ -962,6 +1002,9 @@ public enum BuiltInTemplates {
           "swift build release", "build release", "compile for release",
           "build optimized", "production build swift",
           "swift build -c release", "release build",
+          "build for production", "production build",
+          "compile for production", "optimized build",
+          "build for deployment", "release mode build",
         ],
         command: "swift build -c release {FLAGS}",
         slots: [
@@ -1514,6 +1557,10 @@ public enum BuiltInTemplates {
           "download file with curl", "curl download", "save url to file",
           "download from url", "fetch and save file",
           "curl output to file",
+          "download this webpage", "download webpage as file",
+          "save webpage to file", "download a file from the internet",
+          "download file from url", "save url content",
+          "download this file", "download a file with curl",
         ],
         command: "curl -L -o {OUTPUT} '{URL}'",
         slots: [
@@ -1628,6 +1675,10 @@ public enum BuiltInTemplates {
           "what's on port", "check port", "who is using port",
           "lsof port", "find process on port",
           "which process is listening", "port in use",
+          "check which ports are open", "what is listening on port",
+          "what is using port", "is port open",
+          "check if port is open", "show what is on port",
+          "which ports are in use", "port check",
         ],
         command: "lsof -i :{PORT}",
         slots: [
@@ -1642,6 +1693,10 @@ public enum BuiltInTemplates {
           "ping host", "ping server", "check if host is up",
           "ping address", "test connectivity",
           "is server reachable",
+          "ping google", "ping a website", "check if site is up",
+          "is server up", "is my server still up",
+          "is the server reachable", "check server connectivity",
+          "can I reach the server", "test if server is online",
         ],
         command: "ping -c {COUNT} {HOST}",
         slots: [
@@ -1723,6 +1778,11 @@ public enum BuiltInTemplates {
           "top processes", "cpu usage", "memory usage",
           "what's using cpu", "system resource usage",
           "top", "show top processes",
+          "what is eating my cpu", "what is consuming cpu",
+          "which process is using the most cpu",
+          "what processes are using the most memory",
+          "show resource hogs", "cpu hog",
+          "what is hogging the cpu", "heaviest processes",
         ],
         command: "top -l 1 -n {COUNT} -o {SORT}",
         slots: [
@@ -1809,6 +1869,9 @@ public enum BuiltInTemplates {
           "where is command", "find where command is",
           "full path to binary", "command location",
           "which binary", "where is installed",
+          "where is python installed", "where is node installed",
+          "find where program is", "path to executable",
+          "where is the binary for", "location of command",
         ],
         command: "which {CMD}",
         slots: [
@@ -2173,6 +2236,9 @@ public enum BuiltInTemplates {
           "brew update", "update homebrew", "brew upgrade",
           "update all packages", "upgrade homebrew packages",
           "update brew formulae",
+          "update all brew packages", "upgrade all brew packages",
+          "update everything with brew", "brew update and upgrade",
+          "upgrade all installed packages", "update all formulae",
         ],
         command: "brew update && brew upgrade"
       ),
@@ -2285,6 +2351,11 @@ public enum BuiltInTemplates {
           "create tar archive", "tar create", "make tarball",
           "compress directory into tar", "tar czf",
           "archive directory", "create tar.gz",
+          "compress folder", "compress directory", "compress files",
+          "compress all files", "compress log files",
+          "archive and compress", "tar gz this folder",
+          "archive folder", "archive files", "make archive",
+          "pack directory", "bundle files into archive",
         ],
         command: "tar -czf {ARCHIVE} {PATH}",
         slots: [
@@ -2701,7 +2772,8 @@ public enum BuiltInTemplates {
         ],
         negativeKeywords: ["trash", "artifacts", "remove", "delete", "clean", "docker",
                            "swift", "rust", "cargo", "go", "golang", "flutter", "react",
-                           "node", "npm", "nuke", "test"],
+                           "node", "npm", "nuke", "test", "production", "release",
+                           "project", "this"],
         discriminators: ["sam", "serverless"]
       ),
       CommandTemplate(

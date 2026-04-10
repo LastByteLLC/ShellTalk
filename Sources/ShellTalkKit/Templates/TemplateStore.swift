@@ -229,11 +229,24 @@ public final class TemplateStore: Sendable {
       phrases[phrase] = templateId
     }
     self.phraseIndex = phrases
+
+    // Build TF-IDF index from template intents
+    var tfidfInput: [(id: String, intents: [String])] = []
+    for cat in categories {
+      for template in cat.templates {
+        tfidfInput.append((template.id, template.intents))
+      }
+    }
+    self.tfidfIndex = TFIDFIndex(templates: tfidfInput)
   }
 
   /// Phrase index: 2-3 word phrases from intents → template ID.
   /// Matches compound concepts that BM25 bag-of-words misses.
   public let phraseIndex: [String: String]
+
+  /// TF-IDF vector space index for cosine similarity matching.
+  /// Complements BM25 by scoring in continuous vector space.
+  public let tfidfIndex: TFIDFIndex
 
   /// Normalize a string for exact matching: lowercase, trim, collapse whitespace.
   static func normalize(_ text: String) -> String {
