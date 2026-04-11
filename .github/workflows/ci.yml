@@ -61,7 +61,7 @@ jobs:
           --checksum 6704d137e532f1ac31eafedd80658f9ee61239f2b6291216a02da32361ea9dcb
 
       - name: Remove embedded SDK variant (no Foundation)
-        run: find ~/.swiftpm/swift-sdks -name 'embedded-swift-sdk.json' -delete
+        run: find / -path '*/swift-sdks/*/embedded-swift-sdk.json' -delete 2>/dev/null || true
 
       - name: Verify SDK installed
         run: swift sdk list
