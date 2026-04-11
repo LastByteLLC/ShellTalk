@@ -38,6 +38,14 @@ public final class IntentMatcher: Sendable {
   private let embedding: any EmbeddingProvider
   private let config: MatcherConfig
 
+  /// All meaningful tokens from template intents + command names.
+  /// Used as the correction dictionary for typo tolerance.
+  private let anchorWords: Set<String>
+
+  /// Known CLI command names (from commandPrefixIndex).
+  /// These are never "corrected" to a different command.
+  private let knownCommands: Set<String>
+
   public init(
     store: TemplateStore,
     embedding: (any EmbeddingProvider)? = nil,
@@ -46,12 +54,72 @@ public final class IntentMatcher: Sendable {
     self.store = store
     self.config = config
     self.embedding = embedding ?? makeEmbeddingProvider()
-    // No pre-computation — embeddings are computed lazily at query time.
+
+    // Build anchor word dictionary for typo correction.
+    var anchors = Set<String>()
+    for cat in store.categories {
+      for template in cat.templates {
+        for intent in template.intents {
+          for token in BM25.tokenize(intent) {
+            anchors.insert(token)
+          }
+        }
+      }
+    }
+    self.anchorWords = anchors
+    self.knownCommands = Set(store.commandPrefixIndex.keys)
   }
 
   /// Match a user query to the best command template.
   /// Returns nil if no match exceeds the confidence threshold.
   public func match(_ query: String, entities: [RecognizedEntity] = []) -> IntentMatchResult? {
+    let result = matchInternal(query, entities: entities)
+
+    // Check if the query likely contains typos: any non-trivial token that isn't
+    // a known anchor word, entity, or structured token is suspicious.
+    let likelyHasTypos = queryLikelyHasTypos(query, entities: entities)
+
+    // If we got a confident match AND no suspected typos, use it directly
+    if let result, !likelyHasTypos {
+      return result
+    }
+
+    // Try typo correction — may produce a better match
+    if likelyHasTypos, let corrected = tryTypoCorrection(query, entities: entities) {
+      // Always prefer the corrected match when we detected typos —
+      // the corrected query is inherently more trustworthy than a match
+      // against misspelled tokens.
+      return corrected
+    }
+
+    return result
+  }
+
+  /// Check whether the query likely contains typos by looking for tokens
+  /// that aren't recognized as anchor words, entities, or structured data.
+  private func queryLikelyHasTypos(_ query: String, entities: [RecognizedEntity]) -> Bool {
+    let tokens = BM25.tokenize(query)
+    let entityTexts = Set(
+      entities.flatMap { entity -> [String] in
+        entity.text.lowercased()
+          .components(separatedBy: CharacterSet.alphanumerics.inverted)
+          .filter { $0.count >= 2 }
+      }
+    )
+
+    for token in tokens {
+      guard token.count >= 4 else { continue }
+      if anchorWords.contains(token) { continue }
+      if knownCommands.contains(token) { continue }
+      if entityTexts.contains(token) { continue }
+      if looksLikeStructuredToken(token) { continue }
+      // Found an unrecognized token — likely a typo
+      return true
+    }
+    return false
+  }
+
+  private func matchInternal(_ query: String, entities: [RecognizedEntity]) -> IntentMatchResult? {
     let normalized = TemplateStore.normalize(query)
     guard !normalized.isEmpty else { return nil }
 
@@ -659,6 +727,159 @@ public final class IntentMatcher: Sendable {
     _ c: (category: String, categoryScore: Double, template: BM25Result)
   ) -> Double {
     c.categoryScore * 0.3 + c.template.score * 0.7
+  }
+
+  // MARK: - Typo Tolerance
+
+  /// Attempt to correct typos in the query and re-match.
+  /// Only runs when all other matching paths failed to produce a result.
+  ///
+  /// Safety: skips tokens that are recognized entities (file names, URLs, app names,
+  /// paths, extensions, IPs, etc.), known CLI commands, or structurally non-word tokens.
+  private func tryTypoCorrection(
+    _ query: String, entities: [RecognizedEntity]
+  ) -> IntentMatchResult? {
+    let tokens = BM25.tokenize(query)
+    guard !tokens.isEmpty else { return nil }
+
+    // Collect entity text spans to protect from correction.
+    // Lowercased for comparison against lowercased tokens.
+    let entityTexts = Set(
+      entities.flatMap { entity -> [String] in
+        // Protect the full entity text and each word within it
+        let words = entity.text.lowercased()
+          .components(separatedBy: CharacterSet.alphanumerics.inverted)
+          .filter { $0.count >= 2 }
+        return [entity.text.lowercased()] + words
+      }
+    )
+
+    var corrected = tokens
+    var didCorrect = false
+
+    for (i, token) in tokens.enumerated() {
+      // Skip if token is already a known anchor word
+      if anchorWords.contains(token) { continue }
+
+      // Skip if token is a known CLI command (never correct "ls" → "ps")
+      if knownCommands.contains(token) { continue }
+
+      // Skip if token overlaps with any recognized entity
+      if entityTexts.contains(token) { continue }
+
+      // Skip tokens that look like paths, extensions, or structured data
+      if looksLikeStructuredToken(token) { continue }
+
+      // Skip very short tokens (too ambiguous)
+      guard token.count >= 4 else { continue }
+
+      // Distance threshold based on word length
+      let maxDist = token.count <= 5 ? 1 : 2
+
+      var bestMatch: (word: String, dist: Int)?
+
+      for anchor in anchorWords {
+        // Quick length filter: tokens differing by more than maxDist chars can't match
+        guard abs(anchor.count - token.count) <= maxDist else { continue }
+
+        // Don't correct to very short words (avoids "gist" → "git" type issues)
+        guard anchor.count >= 4 else { continue }
+
+        let dist = editDistance(token, anchor)
+        if dist > 0 && dist <= maxDist {
+          if bestMatch == nil || dist < bestMatch!.dist {
+            bestMatch = (anchor, dist)
+          }
+        }
+      }
+
+      if let best = bestMatch {
+        corrected[i] = best.word
+        didCorrect = true
+      }
+    }
+
+    guard didCorrect else { return nil }
+
+    // Rebuild the query with corrections applied to the ORIGINAL query string
+    // (preserving tokens that BM25 would have stripped as stop words)
+    let correctedQuery = rebuildQuery(original: query, originalTokens: tokens, correctedTokens: corrected)
+
+    // Re-match with the corrected query (no recursion — entities stay the same)
+    return matchInternal(correctedQuery, entities: entities)
+  }
+
+  /// Check if a token looks like structured data that should not be spell-corrected.
+  private func looksLikeStructuredToken(_ token: String) -> Bool {
+    // Contains path separators
+    if token.contains("/") || token.contains("\\") { return true }
+
+    // Looks like a file extension (.swift, .py)
+    if token.hasPrefix(".") { return true }
+
+    // Contains dots (file.txt, example.com)
+    if token.contains(".") { return true }
+
+    // Contains hyphens or underscores (kebab-case, snake_case identifiers)
+    if token.contains("-") || token.contains("_") { return true }
+
+    // Contains digits mixed with letters (abc123, v1, HEAD~2)
+    let hasDigit = token.contains(where: \.isNumber)
+    let hasLetter = token.contains(where: \.isLetter)
+    if hasDigit && hasLetter { return true }
+
+    // All digits (port numbers, PIDs, etc.)
+    if token.allSatisfy(\.isNumber) { return true }
+
+    return false
+  }
+
+  /// Rebuild the original query with corrected tokens.
+  /// Maps BM25-tokenized words back to their positions in the original string
+  /// and substitutes the corrected versions.
+  private func rebuildQuery(original: String, originalTokens: [String], correctedTokens: [String]) -> String {
+    var result = original.lowercased()
+    for (i, token) in originalTokens.enumerated() where token != correctedTokens[i] {
+      // Replace the first occurrence of the misspelled token
+      if let range = result.range(of: token) {
+        result = result.replacingCharacters(in: range, with: correctedTokens[i])
+      }
+    }
+    return result
+  }
+
+  /// Compute the Damerau-Levenshtein distance between two strings.
+  /// Counts insertions, deletions, substitutions, AND adjacent transpositions
+  /// (e.g., "grpe" → "grep") as single edits. This handles the most common
+  /// typo pattern: swapped adjacent characters.
+  private func editDistance(_ a: String, _ b: String) -> Int {
+    let m = a.count, n = b.count
+    if m == 0 { return n }
+    if n == 0 { return m }
+
+    let aChars = Array(a)
+    let bChars = Array(b)
+
+    // Full matrix needed for Damerau-Levenshtein (transposition looks back 2 rows)
+    var d = Array(repeating: Array(repeating: 0, count: n + 1), count: m + 1)
+    for i in 0...m { d[i][0] = i }
+    for j in 0...n { d[0][j] = j }
+
+    for i in 1...m {
+      for j in 1...n {
+        let cost = aChars[i - 1] == bChars[j - 1] ? 0 : 1
+        d[i][j] = min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost)
+
+        // Transposition: swap of two adjacent characters
+        if i > 1 && j > 1
+          && aChars[i - 1] == bChars[j - 2]
+          && aChars[i - 2] == bChars[j - 1]
+        {
+          d[i][j] = min(d[i][j], d[i - 2][j - 2] + cost)
+        }
+      }
+    }
+    return d[m][n]
   }
 }
 

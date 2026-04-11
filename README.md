@@ -1,4 +1,9 @@
 # ShellTalk
+---
+
+![macOS](https://img.shields.io/badge/macOS-15_Sequoia-000000?logo=apple)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+![Swift](https://img.shields.io/badge/Swift-6.2-FA7343.svg)
 
 A deterministic CLI that converts natural language into shell commands.
 
@@ -116,12 +121,20 @@ ShellTalk is fully deterministic. Same query, same machine, same result.
 Query
   -> Entity Recognition (regex, lexicon, preposition frames, NLTagger POS)
   -> BM25 Category Match (12 categories)
-  -> BM25 Template Match (167 templates, NLEmbedding rerank on macOS)
+  -> BM25 + TF-IDF Template Match (167 templates, NLEmbedding rerank on macOS)
   -> Slot Extraction (entity-aware + regex)
   -> Platform Resolution (BSD/GNU, macOS/Linux)
   -> Validation (bash -n, command existence, safety check)
   -> Command
 ```
+
+**Template matching** uses a hybrid BM25 + TF-IDF scoring pipeline:
+
+1. **BM25** ranks categories and templates using bag-of-words term matching with length normalization (k1=1.2, b=0.75)
+2. **TF-IDF** computes cosine similarity in a continuous vector space using sublinear term frequency (1 + log(tf)) and smoothed IDF, then acts as a hybrid layer:
+   - **Boost**: if a BM25 candidate also scores > 0.15 in TF-IDF, its score is boosted
+   - **Inject**: candidates found only by TF-IDF (score > 0.3) are injected into the results, catching matches that require broader conceptual overlap (e.g., "build for production" matching "compile for release")
+3. **NLEmbedding** (macOS only) provides a final semantic rerank pass
 
 **Entity recognition** identifies files, apps, URLs, processes, and other entities in your query using four layers:
 
@@ -159,7 +172,7 @@ Query
 
 ## Cross-platform
 
-Builds and runs on macOS and Linux. On macOS, [`NLEmbedding`](https://developer.apple.com/documentation/naturallanguage/nlembedding) provides enhanced semantic matching. On Linux, BM25 handles all matching with no external dependencies.
+Builds and runs on macOS and Linux. On macOS, [`NLEmbedding`](https://developer.apple.com/documentation/naturallanguage/nlembedding) provides enhanced semantic matching. On Linux, BM25 + TF-IDF handles all matching with no external dependencies.
 
 ```bash
 # Linux build via Docker

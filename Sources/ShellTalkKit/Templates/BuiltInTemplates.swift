@@ -99,6 +99,44 @@ public enum BuiltInTemplates {
         negativeKeywords: ["who", "blame", "author", "wrote"]
       ),
       CommandTemplate(
+        id: "find_by_mmin",
+        intents: [
+          "files changed in the last hour", "modified in the last 30 minutes",
+          "files modified within the last hour", "changes in the last hour",
+          "modified in the past hour", "what changed in the last hour",
+          "files from the last hour", "files edited in the last hour",
+          "modified less than an hour ago", "changed in the past 15 minutes",
+          "files modified in the last 10 minutes", "recently modified minutes ago",
+        ],
+        command: "find {PATH} -type f -mmin -{MINUTES}",
+        slots: [
+          "PATH": SlotDefinition(type: .path, defaultValue: "."),
+          "MINUTES": SlotDefinition(type: .number, defaultValue: "60",
+            extractPattern: #"(?:last|past)\s+(\d+)\s+minutes?"#),
+        ],
+        negativeKeywords: ["git", "commit", "branch", "who", "blame", "author", "wrote",
+                           "days", "day", "week", "weeks", "month", "yesterday"],
+        discriminators: ["hour", "minutes", "minute", "mmin"]
+      ),
+      CommandTemplate(
+        id: "find_by_mmin_hours",
+        intents: [
+          "files changed in the last 2 hours", "modified in the past 3 hours",
+          "files from the last few hours", "changed within hours",
+          "files modified in last hours", "edited in the last 4 hours",
+          "things changed in the past 6 hours", "files from past hours",
+        ],
+        command: "find {PATH} -type f -mmin -$(({HOURS} * 60))",
+        slots: [
+          "PATH": SlotDefinition(type: .path, defaultValue: "."),
+          "HOURS": SlotDefinition(type: .number, defaultValue: "2",
+            extractPattern: #"(?:last|past)\s+(\d+)\s+hours?"#),
+        ],
+        negativeKeywords: ["git", "commit", "branch", "who", "blame", "author", "wrote",
+                           "days", "day", "week", "weeks", "month", "yesterday", "minutes", "minute"],
+        discriminators: ["hours"]
+      ),
+      CommandTemplate(
         id: "find_large_files",
         intents: [
           "find large files", "find biggest files", "find files larger than",
@@ -117,6 +155,8 @@ public enum BuiltInTemplates {
         intents: [
           "copy file", "copy files", "duplicate file",
           "make a copy of", "cp", "copy from to",
+          "backup file", "create backup", "back up file",
+          "save a copy of", "backup my config",
         ],
         command: "cp {FLAGS} {SOURCE} {DEST}",
         slots: [
@@ -130,6 +170,8 @@ public enum BuiltInTemplates {
         intents: [
           "move file", "rename file", "mv", "move files",
           "rename files", "move from to",
+          "put file in", "transfer file to", "move to folder",
+          "relocate file", "relocate to",
         ],
         command: "mv {SOURCE} {DEST}",
         slots: [
@@ -167,6 +209,9 @@ public enum BuiltInTemplates {
         intents: [
           "change permissions", "chmod", "make executable",
           "set file permissions", "make file executable",
+          "give write access", "make read only", "set permissions",
+          "restrict access", "lock down file", "make writable",
+          "read only mode", "remove write permission",
         ],
         command: "chmod {MODE} {PATH}",
         slots: [
@@ -257,7 +302,7 @@ public enum BuiltInTemplates {
         id: "find_and_delete",
         intents: [
           "find and delete", "remove all folders named",
-          "delete all node_modules", "remove all DS_Store",
+          "delete all node_modules", "remove all DS_Store files",
           "recursively remove", "find and remove",
           "delete folders matching", "remove directories named",
         ],
@@ -266,7 +311,8 @@ public enum BuiltInTemplates {
           "PATH": SlotDefinition(type: .path, defaultValue: "."),
           "PATTERN": SlotDefinition(type: .glob,
             extractPattern: #"(?:named|all|remove|delete)\s+(\S+)"#),
-        ]
+        ],
+        negativeKeywords: ["find", "list", "show", "search", "locate", "where"]
       ),
       CommandTemplate(
         id: "find_images",
@@ -279,7 +325,10 @@ public enum BuiltInTemplates {
         command: "find {PATH} -type f \\( -name '*.jpg' -o -name '*.jpeg' -o -name '*.png' -o -name '*.gif' -o -name '*.webp' -o -name '*.svg' \\)",
         slots: [
           "PATH": SlotDefinition(type: .path, defaultValue: "."),
-        ]
+        ],
+        negativeKeywords: ["todo", "fixme", "reference", "comment", "variable", "function",
+                           "class", "import", "error", "warning", "string", "pattern",
+                           "word", "text", "code", "occurrences", "grep"]
       ),
       CommandTemplate(
         id: "chmod_executable",
@@ -336,6 +385,8 @@ public enum BuiltInTemplates {
         intents: [
           "change owner", "chown", "change file ownership",
           "set file owner", "change ownership",
+          "who owns this file", "file owner", "who owns file",
+          "change owner of file", "transfer ownership",
         ],
         command: "chown {FLAGS} {OWNER} {PATH}",
         slots: [
@@ -745,6 +796,10 @@ public enum BuiltInTemplates {
           "find files containing", "extract lines matching",
           "extract pattern from", "pull lines matching",
           "find lines with", "files containing word",
+          "find references to", "find all occurrences",
+          "find TODO comments", "find FIXME comments",
+          "find all references", "find where used",
+          "search for TODO", "search for FIXME",
         ],
         command: "grep -rn '{PATTERN}' {PATH}",
         slots: [
@@ -960,7 +1015,8 @@ public enum BuiltInTemplates {
             extractPattern: #"(?:jq|query|field|extract)\s+['\"]?(\S+)['\"]?"#),
           "FILE": SlotDefinition(type: .path,
             extractPattern: #"(?:from|in)\s+(\S+)"#),
-        ]
+        ],
+        negativeKeywords: ["install", "brew", "package", "add", "dependency"]
       ),
       CommandTemplate(
         id: "xargs_pipe",
@@ -1222,7 +1278,8 @@ public enum BuiltInTemplates {
           "FLAGS": SlotDefinition(type: .string, defaultValue: "--tail 100"),
           "CONTAINER": SlotDefinition(type: .string,
             extractPattern: #"(?:logs?|container|for)\s+(?:the\s+)?(\S+)"#),
-        ]
+        ],
+        negativeKeywords: ["move", "relocate", "copy", "transfer", "put", "backup"]
       ),
       CommandTemplate(
         id: "python_http_server",
@@ -1291,7 +1348,8 @@ public enum BuiltInTemplates {
         ],
         negativeKeywords: ["directory", "folder", "file", "new", "copy", "branch",
                            "executable", "script", "link", "symlink", "empty",
-                           "request", "get", "post", "http", "url", "sure"]
+                           "request", "get", "post", "http", "url", "sure",
+                           "package", "library", "module", "utility", "software"]
       ),
     ]
   )
@@ -1379,7 +1437,8 @@ public enum BuiltInTemplates {
             extractPattern: #"(?:read|domain)\s+(\S+)"#),
           "KEY": SlotDefinition(type: .string, defaultValue: "",
             extractPattern: #"(?:key)\s+(\S+)"#),
-        ]
+        ],
+        negativeKeywords: ["permission", "access", "executable", "owner", "chmod", "chown", "folder", "directory"]
       ),
       CommandTemplate(
         id: "defaults_write",
@@ -1395,7 +1454,8 @@ public enum BuiltInTemplates {
             extractPattern: #"(?:key)\s+(\S+)"#),
           "VALUE": SlotDefinition(type: .string,
             extractPattern: #"(?:to|value)\s+(\S+)"#),
-        ]
+        ],
+        negativeKeywords: ["permission", "access", "executable", "owner", "chmod", "chown", "folder", "directory"]
       ),
       CommandTemplate(
         id: "mdfind_search",
@@ -1804,7 +1864,8 @@ public enum BuiltInTemplates {
           "FLAGS": SlotDefinition(type: .string, defaultValue: "",
             extractPattern: #"(?:by|for)\s+(\S+)"#),
         ],
-        negativeKeywords: ["safari", "chrome", "finder", "app", "application", "xcode", "list", "directory", "folder"]
+        negativeKeywords: ["safari", "chrome", "finder", "app", "application", "xcode", "list", "directory", "folder",
+                           "permission", "owner", "access", "chmod"]
       ),
       CommandTemplate(
         id: "df_disk_free",
@@ -2199,6 +2260,9 @@ public enum BuiltInTemplates {
           "brew install", "install with homebrew", "homebrew install",
           "install package on mac", "brew add",
           "install formula",
+          "install tool", "install utility", "install program",
+          "install package", "install software",
+          "install command line tool", "install a package",
         ],
         command: "brew install {PACKAGE}",
         slots: [
@@ -2262,6 +2326,7 @@ public enum BuiltInTemplates {
           "npm add", "install node module",
           "npm i package", "install from package.json",
           "install node dependencies", "install javascript dependencies",
+          "install js package", "install node package",
         ],
         command: "npm install {PACKAGE}",
         slots: [
@@ -2287,6 +2352,7 @@ public enum BuiltInTemplates {
           "pip install", "install python package", "pip3 install",
           "add python dependency", "install with pip",
           "python install package",
+          "install python library", "install python module",
         ],
         command: "pip3 install {PACKAGE}",
         slots: [

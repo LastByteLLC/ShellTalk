@@ -224,6 +224,28 @@ public final class TemplateStore: Sendable {
       // Shell identity
       "which shell": "echo_var",
       "my shell": "echo_var",
+      // Copy/move
+      "backup file": "cp_file",
+      "create backup": "cp_file",
+      // Sub-day temporal
+      "last hour": "find_by_mmin",
+      "past hour": "find_by_mmin",
+      "last minutes": "find_by_mmin",
+      // Package install
+      "install package": "brew_install",
+      "install tool": "brew_install",
+      // Content search
+      "todo comments": "grep_search",
+      "fixme comments": "grep_search",
+      "references to": "grep_search",
+      "find references": "grep_search",
+      "find occurrences": "grep_search",
+      // Permissions/ownership
+      "write access": "chmod_perms",
+      "read only": "chmod_perms",
+      "file permissions": "chmod_perms",
+      "file ownership": "chown_owner",
+      "who owns": "chown_owner",
     ]
     for (phrase, templateId) in conceptPhrases {
       phrases[phrase] = templateId

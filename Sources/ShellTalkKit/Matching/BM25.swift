@@ -175,6 +175,7 @@ public struct BM25: Sendable {
     "duplicate": ["copy"],
     "replicate": ["copy"],
     "relocate": ["move"],
+    "transfer": ["move", "copy"],
     // Show/display synonyms
     "display": ["show", "list"],
     "peek": ["show", "head", "preview"],

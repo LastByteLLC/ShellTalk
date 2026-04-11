@@ -47,6 +47,14 @@ let allCases: [(String, [EvalCase])] = [
     EvalCase("find files modified today", template: "find_by_mtime", category: "file_ops", required: ["find", "-mtime"], "Direct: modified today"),
     EvalCase("what files changed in the last 3 days", template: "find_by_mtime", category: "file_ops", required: ["find", "-mtime"], slots: ["DAYS": "3"], "Natural: last N days"),
     EvalCase("show recently edited files", template: "find_by_mtime", category: "file_ops", required: ["find", "-mtime"], "Synonym: edited"),
+    EvalCase("files changed in the last 30 minutes", template: "find_by_mmin", category: "file_ops", required: ["find", "-mmin"], slots: ["MINUTES": "30"], "Sub-day: minutes"),
+    EvalCase("what changed in the last hour", template: "find_by_mmin", category: "file_ops", required: ["find", "-mmin"], "Sub-day: last hour"),
+    EvalCase("modified in the past hour", template: "find_by_mmin", category: "file_ops", required: ["find", "-mmin"], "Sub-day: past hour"),
+    EvalCase("files modified in the last 10 minutes", template: "find_by_mmin", category: "file_ops", required: ["find", "-mmin"], slots: ["MINUTES": "10"], "Sub-day: 10 min"),
+    EvalCase("changed in the past 15 minutes", template: "find_by_mmin", category: "file_ops", required: ["find", "-mmin"], slots: ["MINUTES": "15"], "Sub-day: 15 min"),
+    EvalCase("files changed in the last 2 hours", template: "find_by_mmin_hours", category: "file_ops", required: ["find", "-mmin"], "Sub-day: 2 hours"),
+    EvalCase("modified in the past 3 hours", template: "find_by_mmin_hours", category: "file_ops", required: ["find", "-mmin"], "Sub-day: 3 hours"),
+    EvalCase("files from the last few hours", template: "find_by_mmin_hours", category: "file_ops", required: ["find", "-mmin"], "Sub-day: few hours"),
     EvalCase("find files larger than 100M", template: "find_large_files", category: "file_ops", required: ["find", "-size"], slots: ["SIZE": "100M"], "Direct: large files"),
     EvalCase("what are the largest files", template: "find_large_files", category: "file_ops", required: ["find", "-size"], "Natural: biggest files"),
     EvalCase("find huge files over 1G", template: "find_large_files", category: "file_ops", required: ["find", "-size"], "Synonym: huge"),
@@ -76,6 +84,12 @@ let allCases: [(String, [EvalCase])] = [
     EvalCase("touch README.md", template: "touch_file", category: "file_ops", required: ["touch"], "Terse: touch"),
     EvalCase("create symlink to /usr/local/bin/app", template: "symlink", category: "file_ops", required: ["ln", "-s"], "Direct: symlink"),
     EvalCase("ln -s source target", template: "symlink", category: "file_ops", required: ["ln", "-s"], "Terse: ln -s"),
+    EvalCase("backup my config", template: "cp_file", category: "file_ops", required: ["cp"], "Synonym: backup"),
+    EvalCase("relocate logs to /tmp", template: "mv_file", category: "file_ops", required: ["mv"], "Synonym: relocate"),
+    EvalCase("transfer data.csv to archive/", template: "mv_file", category: "file_ops", required: ["mv"], "Synonym: transfer"),
+    EvalCase("give me write access to this folder", template: "chmod_perms", category: "file_ops", required: ["chmod"], "Natural: write access"),
+    EvalCase("make this file read only", template: "chmod_perms", category: "file_ops", required: ["chmod"], "Natural: read only"),
+    EvalCase("who owns this file", template: "chown_owner", category: "file_ops", required: ["chown"], "Natural: file owner"),
   ]),
 
   ("Git", [
@@ -149,6 +163,9 @@ let allCases: [(String, [EvalCase])] = [
     EvalCase("tail -f server.log", template: "tail_follow", category: "text_processing", required: ["tail", "-f"], "Terse"),
     EvalCase("follow the log file", template: "tail_follow", category: "text_processing", required: ["tail", "-f"], "Natural"),
     EvalCase("convert to lowercase", template: "tr_replace", category: "text_processing", required: ["tr"], "Natural"),
+    EvalCase("find TODO comments", template: "grep_search", category: "text_processing", required: ["grep"], "Cross: find + content"),
+    EvalCase("find all references to UserModel", template: "grep_search", category: "text_processing", required: ["grep"], "Cross: find references"),
+    EvalCase("find files with TODO", template: "grep_search", category: "text_processing", required: ["grep"], "Cross: find + content word"),
     EvalCase("parse json from data.json", template: "jq_parse", category: "text_processing", required: ["jq"], "Direct"),
     EvalCase("pretty print json", template: "jq_parse", category: "text_processing", required: ["jq"], "Natural"),
   ]),
@@ -233,6 +250,9 @@ let allCases: [(String, [EvalCase])] = [
     EvalCase("generate requirements.txt", template: "pip_freeze", category: "packages", required: ["pip3 freeze"], "Natural"),
     EvalCase("cargo add serde", template: "cargo_add", category: "packages", required: ["cargo add"], "Terse"),
     EvalCase("gem install rails", template: "gem_install", category: "packages", required: ["gem install"], "Terse"),
+    EvalCase("install jq on this mac", template: "brew_install", category: "packages", required: ["brew install"], "Natural: install tool"),
+    EvalCase("npm install typescript", template: "npm_install", category: "packages", required: ["npm install"], "Explicit: npm prefix"),
+    EvalCase("install a python package numpy", template: "pip_install", category: "packages", required: ["pip3 install"], "Explicit: python package"),
   ]),
 
   ("Compression", [
@@ -363,6 +383,18 @@ let allCases: [(String, [EvalCase])] = [
     EvalCase("I want to see what branches we have", template: "git_branch_list", category: "git", required: ["git branch"], "Edge: verbose"),
     EvalCase("could you please show me the disk usage", template: "du_disk_usage", category: "file_ops", required: ["du"], "Edge: polite"),
     EvalCase("yo list my files bro", template: "ls_files", category: "file_ops", required: ["ls"], "Edge: slang"),
+  ]),
+
+  ("TypoTolerance", [
+    EvalCase("git stauts", template: "git_status", category: "git", required: ["git status"], "Typo: stauts → status"),
+    EvalCase("git comit", template: "git_commit", category: "git", required: ["git commit"], "Typo: comit → commit"),
+    EvalCase("doker ps", template: "docker_ps", category: "dev_tools", required: ["docker ps"], "Typo: doker → docker"),
+    EvalCase("breew install wget", template: "brew_install", category: "packages", required: ["brew install"], "Typo: breew → brew"),
+    EvalCase("git stsh", template: "git_stash", category: "git", required: ["git stash"], "Typo: stsh → stash"),
+    EvalCase("kubctl get pods", template: "kubectl_get", category: "dev_tools", required: ["kubectl get"], "Typo: kubctl → kubectl"),
+    // Safety: these should NOT be corrected
+    EvalCase("find files named config.yaml", template: "find_by_name", category: "file_ops", required: ["find", "config.yaml"], "Safety: filename preserved"),
+    EvalCase("zzzyyyxxx", template: "_nil_", category: "_nil_", "Safety: gibberish stays nil"),
   ]),
 
   // MARK: New Commands
