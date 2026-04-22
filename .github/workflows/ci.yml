@@ -3,11 +3,12 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write         # write: needed by the release job to create releases
   pages: write
   id-token: write
 
@@ -17,42 +18,167 @@ concurrency:
 
 jobs:
   macos:
-    name: macOS (Swift ${{ matrix.swift }})
-    runs-on: macos-15
-    strategy:
-      matrix:
-        swift: ["6.0"]
+    name: macOS
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v5
-      - name: Build
+
+      - name: Build (debug)
         run: swift build
+
       - name: Test
         run: swift test
 
+      - name: Build (release)
+        run: swift build -c release --product shelltalk --product stm-eval
+
+      - name: Evaluate matching accuracy
+        run: |
+          .build/release/stm-eval --quiet --metrics-out /tmp/metrics.json
+          {
+            echo "### STM accuracy (macOS)"
+            echo ""
+            echo "| metric | value |"
+            echo "|---|---:|"
+            python3 -c "
+          import json
+          d=json.load(open('/tmp/metrics.json'))
+          rows = [
+            ('tpl_acc',   f'{d[\"tpl_acc\"]:.4f}'),
+            ('cat_acc',   f'{d[\"cat_acc\"]:.4f}'),
+            ('substr_acc',f'{d[\"substr_acc\"]:.4f}'),
+            ('slot_acc',  f'{d[\"slot_acc\"]:.4f}'),
+            ('neg_acc',   f'{d[\"neg_acc\"]:.4f}'),
+            ('p50_ms',    f'{d[\"p50_ms\"]:.1f}'),
+            ('p95_ms',    f'{d[\"p95_ms\"]:.1f}'),
+            ('p99_ms',    f'{d[\"p99_ms\"]:.1f}'),
+            ('n_cases',   str(d['n_cases'])),
+          ]
+          for k,v in rows: print(f'| {k} | {v} |')
+          print()
+          print('**per-path accuracy**')
+          print()
+          print('| path | n | acc |')
+          print('|---|---:|---:|')
+          for k in sorted(d['per_path']):
+            v = d['per_path'][k]
+            print(f'| {k} | {v[\"n\"]} | {v[\"acc\"]:.3f} |')
+          "
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Package release binary
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          mkdir -p dist
+          VERSION=${GITHUB_REF_NAME}
+          ARCHIVE=shelltalk-${VERSION}-macos-universal.tar.gz
+          # macos-26 runners are arm64; ship arm64 + link stm-eval too
+          tar -czf "dist/${ARCHIVE}" -C .build/release shelltalk stm-eval
+          shasum -a 256 "dist/${ARCHIVE}" > "dist/${ARCHIVE}.sha256"
+          echo "ARCHIVE=${ARCHIVE}" >> "$GITHUB_ENV"
+
+      - name: Upload macOS artifact
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: shelltalk-macos
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
   linux:
-    name: Linux (Swift ${{ matrix.swift }})
-    runs-on: ubuntu-latest
-    container: swiftlang/swift:nightly-6.1-jammy
-    strategy:
-      matrix:
-        swift: ["6.1-nightly"]
+    name: Linux
+    runs-on: ubuntu-24.04
+    # Install Swift directly rather than using the `swift:6.3-jammy` floating
+    # container tag — see comment on the wasm job for why. This also lets the
+    # same toolchain version build ShellTalkKit on Linux, wasm, and release
+    # artifacts.
     steps:
       - uses: actions/checkout@v5
-      - name: Build
+
+      - name: Install Swift 6.3 toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libcurl4-openssl-dev libedit2 libncurses5 libpython3-dev libsqlite3-0 libxml2 libz3-dev tzdata
+          curl -fsSL -o swift.tar.gz https://download.swift.org/swift-6.3-release/ubuntu2404/swift-6.3-RELEASE/swift-6.3-RELEASE-ubuntu24.04.tar.gz
+          sudo mkdir -p /opt/swift
+          sudo tar -xzf swift.tar.gz -C /opt/swift --strip-components=1
+          echo "/opt/swift/usr/bin" >> "$GITHUB_PATH"
+
+      - name: Verify Swift version
+        run: swift --version
+
+      - name: Build (debug)
         run: swift build
+
       - name: Test
         run: swift test
+
+      - name: Build (release)
+        run: swift build -c release --product shelltalk --product stm-eval
+
       - name: Smoke test
         run: |
-          swift run shelltalk "find swift files"
-          swift run shelltalk --profile
+          .build/release/shelltalk "find swift files"
+          .build/release/shelltalk --profile
+
+      - name: Evaluate matching accuracy
+        run: |
+          .build/release/stm-eval --quiet --metrics-out /tmp/metrics.json
+          {
+            echo "### STM accuracy (Linux)"
+            echo ""
+            python3 -c "
+          import json
+          d=json.load(open('/tmp/metrics.json'))
+          print(f'| metric | value |')
+          print(f'|---|---:|')
+          rows = [('tpl_acc', d['tpl_acc']), ('cat_acc', d['cat_acc']),
+                  ('p50_ms', d['p50_ms']), ('p95_ms', d['p95_ms'])]
+          for k,v in rows: print(f'| {k} | {v:.4f} |')
+          "
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Package release binary
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          mkdir -p dist
+          VERSION=${GITHUB_REF_NAME}
+          ARCHIVE=shelltalk-${VERSION}-linux-x86_64.tar.gz
+          tar -czf "dist/${ARCHIVE}" -C .build/release shelltalk stm-eval
+          sha256sum "dist/${ARCHIVE}" > "dist/${ARCHIVE}.sha256"
+
+      - name: Upload Linux artifact
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: shelltalk-linux
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
 
   wasm:
     name: WebAssembly
-    runs-on: ubuntu-latest
-    container: swift:6.3-jammy
+    runs-on: ubuntu-24.04
+    # No `container:` — the floating `swift:6.3-jammy` tag drifted to 6.3.1
+    # which is ABI-incompatible with the pinned swift-wasm-6.3-RELEASE SDK
+    # ("module compiled with Swift 6.3 cannot be imported by Swift 6.3.1").
+    # Installing Swift 6.3 directly from download.swift.org pins both
+    # compiler and SDK to the same version.
     steps:
       - uses: actions/checkout@v5
+
+      - name: Install Swift 6.3 toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libcurl4-openssl-dev libedit2 libncurses5 libpython3-dev libsqlite3-0 libxml2 libz3-dev tzdata
+          curl -fsSL -o swift.tar.gz https://download.swift.org/swift-6.3-release/ubuntu2404/swift-6.3-RELEASE/swift-6.3-RELEASE-ubuntu24.04.tar.gz
+          sudo mkdir -p /opt/swift
+          sudo tar -xzf swift.tar.gz -C /opt/swift --strip-components=1
+          echo "/opt/swift/usr/bin" >> "$GITHUB_PATH"
+
+      - name: Verify Swift version
+        run: swift --version
 
       - name: Install Swift SDK for WASM
         run: >-
@@ -71,7 +197,7 @@ jobs:
 
       - name: Optimize WASM binary
         run: |
-          apt-get update -qq && apt-get install -y -qq binaryen > /dev/null
+          sudo apt-get install -y -qq binaryen
           wasm-opt -Oz --strip-debug --strip-producers \
             .build/wasm32-unknown-wasip1/release/shelltalk-wasm.wasm \
             -o Web/shelltalk.wasm
@@ -80,6 +206,15 @@ jobs:
         uses: actions/upload-pages-artifact@v4
         with:
           path: Web
+
+      - name: Upload WASM artifact (release only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: shelltalk-wasm
+          path: Web/shelltalk.wasm
+          if-no-files-found: error
+          retention-days: 7
 
   deploy:
     name: Deploy to GitHub Pages
@@ -93,3 +228,42 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+  release:
+    name: Release
+    needs: [macos, linux, wasm]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: shelltalk-macos
+          path: dist/
+
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: shelltalk-linux
+          path: dist/
+
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: shelltalk-wasm
+          path: dist/
+
+      - name: List release assets
+        run: ls -la dist/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/*.tar.gz
+            dist/*.sha256
+            dist/shelltalk.wasm
+          fail_on_unmatched_files: true

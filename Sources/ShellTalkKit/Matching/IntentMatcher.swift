@@ -143,6 +143,15 @@ public final class IntentMatcher: Sendable {
       return result
     }
 
+    // Fast path 1.5: Authoritative concept-phrase match.
+    // Curated `conceptPhrases` (TemplateStore) express intent-to-template
+    // mappings the maintainer guarantees — these must NOT be overridable by
+    // BM25 ranking. Auto-generated n-gram entries in `phraseIndex` remain
+    // subject to the BM25 override at Fast path 2.
+    if let result = tryAuthoritativePhraseMatch(normalized) {
+      return result
+    }
+
     // Run BM25 (entity-aware) — always runs now
     let bm25Result = bm25Match(query, entities: entities)
 
@@ -224,6 +233,35 @@ public final class IntentMatcher: Sendable {
       )
     }
 
+    return nil
+  }
+
+  // MARK: - Fast Path: Authoritative Concept-Phrase Match
+
+  /// Check only the curated `authoritativePhraseIndex` (not auto-generated
+  /// n-grams). Hits here win unconditionally — no BM25 override. Used for
+  /// cases where the maintainer has deliberately mapped a phrase to a
+  /// specific template and does not want BM25 ranking to second-guess it.
+  private func tryAuthoritativePhraseMatch(_ normalized: String) -> IntentMatchResult? {
+    let words = normalized.split(separator: " ").map(String.init)
+    guard words.count >= 2 else { return nil }
+    for n in [3, 2] {
+      for i in 0...(max(0, words.count - n)) {
+        guard i + n <= words.count else { break }
+        let phrase = words[i..<(i + n)].joined(separator: " ")
+        if let templateId = store.authoritativePhraseIndex[phrase],
+           let (categoryId, template) = lookupTemplate(templateId) {
+          return IntentMatchResult(
+            categoryId: categoryId,
+            categoryScore: 1.0,
+            templateId: templateId,
+            templateScore: 0.95,
+            embeddingScore: nil,
+            template: template
+          )
+        }
+      }
+    }
     return nil
   }
 

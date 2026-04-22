@@ -240,7 +240,6 @@ public final class TemplateStore: Sendable {
       "references to": "grep_search",
       "find references": "grep_search",
       "find occurrences": "grep_search",
-      // Permissions/ownership
       "write access": "chmod_perms",
       "read only": "chmod_perms",
       "file permissions": "chmod_perms",
@@ -250,7 +249,22 @@ public final class TemplateStore: Sendable {
     for (phrase, templateId) in conceptPhrases {
       phrases[phrase] = templateId
     }
+
+    // Authoritative overrides — validated by the Meta-Harness loop
+    // (run 2026-04-22). Hits here bypass the BM25 override gate and
+    // win unconditionally. Only add entries with broad-enough meaning
+    // that BM25 ranking should never second-guess them.
+    let authoritativeOverrides: [String: String] = [
+      "all the files": "ls_files",           // vs pwd on "current directory"
+      "resize image": "magick_resize",       // cross-platform over sips
+      "open file with": "open_with_app",     // distinguishes from "open file"
+      "watch git": "watch_command",          // vs git_status phrase
+    ]
+    for (phrase, templateId) in authoritativeOverrides {
+      phrases[phrase] = templateId
+    }
     self.phraseIndex = phrases
+    self.authoritativePhraseIndex = authoritativeOverrides
 
     // Build TF-IDF index from template intents
     var tfidfInput: [(id: String, intents: [String])] = []
@@ -263,8 +277,17 @@ public final class TemplateStore: Sendable {
   }
 
   /// Phrase index: 2-3 word phrases from intents → template ID.
-  /// Matches compound concepts that BM25 bag-of-words misses.
+  /// Matches compound concepts that BM25 bag-of-words misses. Includes both
+  /// auto-generated n-grams (derived from intents) and curated overrides
+  /// (see `authoritativePhraseIndex`).
   public let phraseIndex: [String: String]
+
+  /// Curated subset of `phraseIndex` — the human-authored concept-phrase
+  /// overrides defined inline in `init`. These are considered authoritative:
+  /// if a query contains one of these phrases, the corresponding template
+  /// wins unconditionally, bypassing the BM25 override gate. Auto-generated
+  /// n-gram entries in `phraseIndex` remain subject to BM25 override.
+  public let authoritativePhraseIndex: [String: String]
 
   /// TF-IDF vector space index for cosine similarity matching.
   /// Complements BM25 by scoring in continuous vector space.
