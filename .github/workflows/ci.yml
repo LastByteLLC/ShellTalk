@@ -99,7 +99,8 @@ jobs:
       - name: Install Swift 6.3 toolchain
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq libcurl4-openssl-dev libedit2 libncurses5 libpython3-dev libsqlite3-0 libxml2 libz3-dev tzdata
+          # Ubuntu 24.04 (noble) dropped libncurses5; Swift 6.3 works without it.
+          sudo apt-get install -y -qq binutils libc6-dev libcurl4-openssl-dev libedit2 libgcc-13-dev libpython3-dev libsqlite3-0 libstdc++-13-dev libxml2-dev libz3-dev tzdata zlib1g-dev
           curl -fsSL -o swift.tar.gz https://download.swift.org/swift-6.3-release/ubuntu2404/swift-6.3-RELEASE/swift-6.3-RELEASE-ubuntu24.04.tar.gz
           sudo mkdir -p /opt/swift
           sudo tar -xzf swift.tar.gz -C /opt/swift --strip-components=1
@@ -171,7 +172,8 @@ jobs:
       - name: Install Swift 6.3 toolchain
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq libcurl4-openssl-dev libedit2 libncurses5 libpython3-dev libsqlite3-0 libxml2 libz3-dev tzdata
+          # Ubuntu 24.04 (noble) dropped libncurses5; Swift 6.3 works without it.
+          sudo apt-get install -y -qq binutils libc6-dev libcurl4-openssl-dev libedit2 libgcc-13-dev libpython3-dev libsqlite3-0 libstdc++-13-dev libxml2-dev libz3-dev tzdata zlib1g-dev
           curl -fsSL -o swift.tar.gz https://download.swift.org/swift-6.3-release/ubuntu2404/swift-6.3-RELEASE/swift-6.3-RELEASE-ubuntu24.04.tar.gz
           sudo mkdir -p /opt/swift
           sudo tar -xzf swift.tar.gz -C /opt/swift --strip-components=1
