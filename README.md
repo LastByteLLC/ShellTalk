@@ -2,7 +2,7 @@
 ---
 
 ![macOS](https://img.shields.io/badge/macOS-15_Sequoia-000000?logo=apple)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 ![Swift](https://img.shields.io/badge/Swift-6.2-FA7343.svg)
 
 A deterministic CLI that converts natural language into shell commands.
@@ -121,7 +121,7 @@ ShellTalk is fully deterministic. Same query, same machine, same result.
 Query
   -> Entity Recognition (regex, lexicon, preposition frames, NLTagger POS)
   -> BM25 Category Match (12 categories)
-  -> BM25 + TF-IDF Template Match (167 templates, NLEmbedding rerank on macOS)
+  -> BM25 + TF-IDF Template Match (235 templates, NLEmbedding rerank on macOS)
   -> Slot Extraction (entity-aware + regex)
   -> Platform Resolution (BSD/GNU, macOS/Linux)
   -> Validation (bash -n, command existence, safety check)
@@ -157,16 +157,16 @@ Query
 
 | Category | Templates | Examples |
 | ---------- | ----------- | --------- |
-| File Operations | 17 | find, ls, cp, mv, rm, mkdir, du, chmod |
-| Git | 20 | status, diff, log, commit, branch, merge, stash, blame |
+| File Operations | 24 | find, ls, cp, mv, rm, mkdir, du, chmod |
+| Git | 29 | status, diff, log, commit, branch, merge, stash, blame |
 | Text Processing | 16 | grep, sed, awk, sort, uniq, wc, head, tail, jq |
-| Dev Tools | 15 | swift, cargo, go, node, python, docker, kubectl |
+| Dev Tools | 24 | swift, cargo, go, node, python, docker, kubectl |
 | macOS | 16 | open, pbcopy, say, defaults, mdfind, sips, screencapture |
 | Network | 12 | curl, ssh, scp, dig, ping |
-| System | 14 | ps, kill, df, env, which, uptime |
+| System | 38 | ps, kill, df, env, which, uptime |
 | Packages | 12 | brew, npm, pip, cargo |
 | Compression | 12 | tar, gzip, zip, xz, zstd |
-| Cloud | 12 | aws s3/ec2/lambda, kubectl |
+| Cloud | 29 | aws s3/ec2/lambda, kubectl |
 | Media | 11 | ffmpeg, imagemagick, sips |
 | Shell Scripting | 12 | for, while, if, subshells, heredocs |
 
@@ -178,6 +178,37 @@ Builds and runs on macOS and Linux. On macOS, [`NLEmbedding`](https://developer.
 # Linux build via Docker
 docker build -t shelltalk .
 ```
+
+## Meta-Harness
+
+Matching quality is improved by an agentic proposer loop — one Claude instance reads prior candidate traces in `harness/runs/`, proposes one change, evaluates it, and keeps only Pareto wins. Inspired by [Meta-Harness](https://arxiv.org/abs/2603.28052): causal reasoning emerges from reading many prior attempts, not from summaries.
+
+Each candidate is a branch + artifact dir containing an `overlay.yaml`, `metrics.json`, and `traces/eval.jsonl`. Overlays (see `harness/overlay-schema.md`) tweak matcher thresholds, per-template `discriminators`, `negativeKeywords`, or `addIntents` without touching source. Source edits are allowed only on candidate branches.
+
+Candidates are scored by `stm-eval` against 380 curated `EvalCase`s and gated by `swift test --filter STMAccuracy` — zero-regression, no exceptions. Validated refinements graduate into `Sources/ShellTalkKit/Templates/TemplateRefinements.swift`.
+
+Current shipped frontier (see `harness/frontier.md`):
+
+| state            | tpl_acc | cat_acc | BM25 lane | p95_ms |
+| ---------------- | ------: | ------: | --------: | -----: |
+| shipped (main)   |  0.9500 |  0.9763 |     0.850 |    319 |
+| original baseline |  0.8947 |  0.9421 |     0.687 |   1038 |
+
+Net: **+5.53pp tpl_acc**, **+3.42pp cat_acc**, **+16.3pp** on the BM25 ranking lane, with determinism restored (F1 in `harness/FINDINGS.md`). `harness/runs/` is gitignored — only the shipped state lives in source and `frontier.md`.
+
+```bash
+# Evaluate an overlay candidate
+swift build -c release --product stm-eval
+.build/release/stm-eval --quiet \
+  --overlay    harness/runs/<run>/<cand>/overlay.yaml \
+  --trace-out  harness/runs/<run>/<cand>/traces/eval.jsonl \
+  --metrics-out harness/runs/<run>/<cand>/metrics.json
+
+# Gate: curated STMAccuracy tests with overlay applied
+SHELLTALK_OVERLAY_PATH=<overlay> swift test --filter STMAccuracy
+```
+
+`harness/FINDINGS.md` carries forward durable methodology notes (F1–F12) — e.g. `Set` iteration must be sorted for deterministic ranking, and `discriminators` should be preferred over `addIntents` because the latter perturbs global BM25/TF-IDF statistics.
 
 ## Testing
 
