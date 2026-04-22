@@ -355,7 +355,11 @@ public final class TemplateStore: Sendable {
   #endif
 
   /// Load from built-in templates bundled with the library.
+  /// Applies `TemplateRefinements.defaultOverlay` — a curated set of
+  /// discriminator/negative-keyword tweaks validated by the Meta-Harness
+  /// loop. See Sources/ShellTalkKit/Templates/TemplateRefinements.swift.
   public static func builtIn() -> TemplateStore {
-    TemplateStore(categories: BuiltInTemplates.all)
+    let refined = TemplateRefinements.defaultOverlay.apply(to: BuiltInTemplates.all)
+    return TemplateStore(categories: refined)
   }
 }

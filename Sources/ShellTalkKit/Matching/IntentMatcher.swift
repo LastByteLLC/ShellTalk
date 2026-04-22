@@ -42,6 +42,14 @@ public final class IntentMatcher: Sendable {
   /// Used as the correction dictionary for typo tolerance.
   private let anchorWords: Set<String>
 
+  /// Sorted snapshot of `anchorWords` for deterministic typo-correction
+  /// iteration. `Set<String>` iteration order is hash-seed dependent and
+  /// varies between process runs, which makes typo correction a flaky
+  /// tiebreaker across equal-distance anchors. Sorting by (length-gap,
+  /// lexical) gives stable results and prefers same-length matches which
+  /// biases toward transposition corrections (the most common typo class).
+  private let anchorWordsSorted: [String]
+
   /// Known CLI command names (from commandPrefixIndex).
   /// These are never "corrected" to a different command.
   private let knownCommands: Set<String>
@@ -67,6 +75,7 @@ public final class IntentMatcher: Sendable {
       }
     }
     self.anchorWords = anchors
+    self.anchorWordsSorted = anchors.sorted()
     self.knownCommands = Set(store.commandPrefixIndex.keys)
   }
 
@@ -149,9 +158,16 @@ public final class IntentMatcher: Sendable {
       return phraseResult
     }
 
-    // Fast path 3: Command-prefix match — only wins if BM25 didn't score higher
+    // Fast path 3: Command-prefix match.
+    //   - "strong" single-candidate direct match (templateScore == 1.0 via
+    //     tryCommandPrefixMatch): always wins — the user invoked a specific
+    //     CLI by name and no other template shares the prefix.
+    //   - Discriminator/default/flag matches (templateScore < 1.0): BM25
+    //     overrides only if it scores confidently (>3.0) on a different
+    //     template.
     if let prefixResult = tryCommandPrefixMatch(query: query, normalized: normalized) {
-      if let bm25 = bm25Result {
+      let isStrongPrefix = prefixResult.templateScore >= 1.0
+      if !isStrongPrefix, let bm25 = bm25Result {
         let bm25Score = bm25.categoryScore * 0.3 + bm25.templateScore * 0.7
         if bm25Score > 3.0 && bm25.templateId != prefixResult.templateId {
           return bm25
@@ -266,6 +282,25 @@ public final class IntentMatcher: Sendable {
   /// When the first token of the query is a known shell command with few candidate
   /// templates (≤ 4), restrict search to those templates using discriminator logic.
   /// For commands with many templates (like "git"), fall through to BM25.
+  /// Tighter check than `looksLikeStructuredToken` — recognises *only* the
+  /// tokens that are almost certainly file paths, filenames with extensions,
+  /// or CLI flags. Used to distinguish "head main.swift" (CLI invocation,
+  /// prefix match) from "head of water" (natural language, skip prefix).
+  private func tokenLooksLikePathOrFlag(_ token: String) -> Bool {
+    if token.hasPrefix("-") { return true }                 // flag: -f, --verbose
+    if token.contains("/") || token.contains("\\") { return true }  // path
+    // File extension: 1-5 trailing chars after a dot, all letters/digits
+    if let dotIdx = token.lastIndex(of: "."),
+       token.distance(from: dotIdx, to: token.endIndex) >= 2,
+       token.distance(from: dotIdx, to: token.endIndex) <= 6 {
+      let ext = token[token.index(after: dotIdx)...]
+      if ext.allSatisfy({ $0.isLetter || $0.isNumber }) && ext.contains(where: \.isLetter) {
+        return true
+      }
+    }
+    return false
+  }
+
   /// Words that are common English verbs AND CLI command names.
   /// When these appear as the first word of a 3+ word query, skip command-prefix
   /// and let BM25 handle it — the user is speaking naturally, not invoking the CLI tool.
@@ -274,18 +309,40 @@ public final class IntentMatcher: Sendable {
     "set", "check", "clear", "test", "run", "start", "stop", "create",
     "watch", "export", "sort", "head", "tail", "top", "kill", "host",
     "touch", "file", "date", "diff", "split", "join", "cut", "tr",
-    "look", "mount", "read", "write", "link", "cal",
+    "look", "mount", "read", "write", "link", "cal", "who",
   ]
 
   private func tryCommandPrefixMatch(query: String, normalized: String) -> IntentMatchResult? {
     let words = normalized.split(separator: " ").map(String.init)
     guard words.count >= 2 else { return nil }
 
-    // Skip command-prefix for natural-language verbs in longer queries.
-    // "which python3" (2 words) → command-prefix OK
-    // "which file was modified recently" (5 words) → skip, use BM25
+    // Skip command-prefix for natural-language verbs in longer queries,
+    // UNLESS the 2nd token looks like a path/file/flag — those are CLI
+    // invocations, not natural-language utterances.
+    //   "head main.swift" (3 words, 2nd = file)        → keep prefix path
+    //   "tail server.log" (2 words)                    → keep prefix path
+    //   "head -n 20 file.txt" (4 words, 2nd = flag)    → keep prefix path
+    //   "which file was modified recently" (5 words)   → skip, use BM25
+    //   "run the build script" (4 words)               → skip, use BM25
+    //   "who changed AppDelegate.swift" (3 words)      → skip ("changed" not path-like)
     if words.count >= 3, Self.naturalLanguageVerbs.contains(words[0]) {
-      return nil
+      if !tokenLooksLikePathOrFlag(words[1]) {
+        return nil
+      }
+    }
+    // Also skip 2-word NL-verb queries where the 2nd token is not a
+    // command-ish token ("who is" → skip, but "which python3" → keep).
+    if words.count == 2, Self.naturalLanguageVerbs.contains(words[0]) {
+      let second = words[1]
+      let isCommandish = tokenLooksLikePathOrFlag(second)
+        || knownCommands.contains(second)
+        || second.allSatisfy({ $0.isLetter || $0.isNumber })
+      if !isCommandish {
+        // "who is", "show me", "find my" → natural language
+        if ["is", "me", "my", "the", "a", "an"].contains(second) {
+          return nil
+        }
+      }
     }
 
     // Try two-token prefix first (e.g., "aws s3", "git stash"), then single-token
@@ -334,7 +391,11 @@ public final class IntentMatcher: Sendable {
             categoryId: categoryId,
             categoryScore: 1.0,
             templateId: candidateId,
-            templateScore: 0.9,
+            // Strong direct-match signal: single candidate AND first token
+            // matches the template's actual command. Score 1.0 tells
+            // matchInternal that this is authoritative and should not be
+            // overridden by BM25.
+            templateScore: 1.0,
             embeddingScore: nil,
             template: template
           )
@@ -776,9 +837,9 @@ public final class IntentMatcher: Sendable {
       // Distance threshold based on word length
       let maxDist = token.count <= 5 ? 1 : 2
 
-      var bestMatch: (word: String, dist: Int)?
+      var bestMatch: (word: String, dist: Int, lenGap: Int)?
 
-      for anchor in anchorWords {
+      for anchor in anchorWordsSorted {
         // Quick length filter: tokens differing by more than maxDist chars can't match
         guard abs(anchor.count - token.count) <= maxDist else { continue }
 
@@ -787,8 +848,11 @@ public final class IntentMatcher: Sendable {
 
         let dist = editDistance(token, anchor)
         if dist > 0 && dist <= maxDist {
-          if bestMatch == nil || dist < bestMatch!.dist {
-            bestMatch = (anchor, dist)
+          let lenGap = abs(anchor.count - token.count)
+          if bestMatch == nil
+             || dist < bestMatch!.dist
+             || (dist == bestMatch!.dist && lenGap < bestMatch!.lenGap) {
+            bestMatch = (anchor, dist, lenGap)
           }
         }
       }

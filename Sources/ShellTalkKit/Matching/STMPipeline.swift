@@ -11,6 +11,16 @@ public struct PipelineConfig: Sendable {
   public let validateCommands: Bool
   public let includeDebugInfo: Bool
 
+  public init(
+    matcherConfig: MatcherConfig,
+    validateCommands: Bool,
+    includeDebugInfo: Bool
+  ) {
+    self.matcherConfig = matcherConfig
+    self.validateCommands = validateCommands
+    self.includeDebugInfo = includeDebugInfo
+  }
+
   public static let `default` = PipelineConfig(
     matcherConfig: .default,
     validateCommands: true,
@@ -82,11 +92,28 @@ public final class STMPipeline: Sendable {
   ) {
     let initStart = PipelineTimer.now()
     let prof = profile ?? SystemProfile.detect()
-    let st = store ?? TemplateStore.builtIn()
+    var st = store ?? TemplateStore.builtIn()
+    var cfg = config
+
+    // Meta-Harness overlay hook: if SHELLTALK_OVERLAY_PATH is set, layer the
+    // overlay onto the matcher config and template corpus. This lets the
+    // curated test gate (STMAccuracyTests) validate candidates without
+    // duplicating pipeline construction.
+    #if canImport(Yams) && !os(WASI)
+    if let overlayPath = ProcessInfo.processInfo.environment["SHELLTALK_OVERLAY_PATH"],
+       let overlay = PipelineOverlay.load(path: overlayPath) {
+      cfg = PipelineConfig(
+        matcherConfig: overlay.apply(to: cfg.matcherConfig),
+        validateCommands: cfg.validateCommands,
+        includeDebugInfo: cfg.includeDebugInfo
+      )
+      st = TemplateStore(categories: overlay.apply(to: st.categories))
+    }
+    #endif
 
     self.profile = prof
-    self.config = config
-    self.matcher = IntentMatcher(store: st, config: config.matcherConfig)
+    self.config = cfg
+    self.matcher = IntentMatcher(store: st, config: cfg.matcherConfig)
     self.extractor = SlotExtractor()
     self.recognizer = EntityRecognizer(profile: prof)
     self.resolver = TemplateResolver(profile: prof)
