@@ -30,7 +30,11 @@ jobs:
         run: swift test
 
       - name: Build (release)
-        run: swift build -c release --product shelltalk --product stm-eval
+        # `--product` with multiple values only builds the last one;
+        # run two invocations so both binaries land in .build/release/.
+        run: |
+          swift build -c release --product shelltalk
+          swift build -c release --product stm-eval
 
       - name: Evaluate matching accuracy
         run: |
@@ -116,7 +120,11 @@ jobs:
         run: swift test
 
       - name: Build (release)
-        run: swift build -c release --product shelltalk --product stm-eval
+        # `--product` with multiple values only builds the last one;
+        # run two invocations so both binaries land in .build/release/.
+        run: |
+          swift build -c release --product shelltalk
+          swift build -c release --product stm-eval
 
       - name: Smoke test
         run: |
