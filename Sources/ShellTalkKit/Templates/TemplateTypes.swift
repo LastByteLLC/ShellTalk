@@ -97,6 +97,7 @@ public enum SlotType: String, Sendable, Codable {
   case branch       // Git branch name
   case pattern      // Regex or search pattern
   case command      // A sub-command
+  case fileExtension // File extension, canonicalized (markdown→md, javascript→js)
 }
 
 /// An optional flag that can be appended to a command.

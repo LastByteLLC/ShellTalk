@@ -74,7 +74,7 @@ public enum BuiltInTemplates {
         command: "find {PATH} -name '*.{EXT}' -type f",
         slots: [
           "PATH": SlotDefinition(type: .path, defaultValue: "."),
-          "EXT": SlotDefinition(type: .string,
+          "EXT": SlotDefinition(type: .fileExtension,
             extractPattern: #"(?:find|list|show)\s+(?:all\s+)?\.?(\w+)\s+files|files?\s+(?:with\s+)?\.(\w+)"#),
         ]
       ),

@@ -255,7 +255,7 @@ public struct SlotExtractor: Sendable {
       return extractURL(from: query)
     case .branch:
       return extractBranch(from: query)
-    case .pattern, .string, .command:
+    case .pattern, .string, .command, .fileExtension:
       return nil
     }
   }
@@ -308,6 +308,8 @@ public struct SlotExtractor: Sendable {
       if let num = Int(cleaned), num < 1 || num > 65535 {
         return "8080"
       }
+    case .fileExtension:
+      cleaned = FileExtensionAliases.resolve(cleaned)
     default:
       break
     }
@@ -328,6 +330,7 @@ public struct SlotExtractor: Sendable {
     .number: [.number, .size, .port],
     .string: [.string, .applicationName, .processName, .commandName, .packageName, .fileName],
     .command: [.commandName],
+    .fileExtension: [.string],
   ]
 
   /// Common slot name → preferred entity role.

@@ -113,6 +113,26 @@ struct STMAccuracyTests {
       expectTemplate("create directory src/models", "mkdir_dir")
     }
 
+    // File-format-name → on-disk extension canonicalization.
+    // Only cases that route to `find_by_extension` are asserted here;
+    // routing-failed cases (JavaScript, Ruby, Golang, HTML, CONFIG, .ts-dot-form)
+    // are stm-eval-only pending Cand-003 routing refinements.
+    @Test("File extension canonicalization (format-name → on-disk ext)")
+    func fileExtensionAliases() {
+      expectTemplate("find all Markdown files", "find_by_extension")
+      expectCommand("find all Markdown files", contains: "'*.md'")
+      expectCommand("find markdown files", contains: "'*.md'")
+      expectCommand("find all TypeScript files", contains: "'*.ts'")
+      expectCommand("find Python files", contains: "'*.py'")
+      expectCommand("list all Python files", contains: "'*.py'")
+      expectCommand("find Rust files", contains: "'*.rs'")
+      expectCommand("find Kotlin files", contains: "'*.kt'")
+      expectCommand("find shell files", contains: "'*.sh'")
+      expectCommand("find YAML files", contains: "'*.yaml'")
+      expectCommand("find MARKDOWN files", contains: "'*.md'")
+      expectCommand("find all PYTHON files", contains: "'*.py'")
+    }
+
     @Test("Git operations in natural language")
     func gitOps() {
       expectTemplate("show me uncommitted changes", "git_status")
