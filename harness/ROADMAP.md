@@ -53,7 +53,7 @@ and familiarity with the harness loop.
 | T1.2 | `grep_search` wins on quoted-regex queries | B | ~10 | medium | WildShellMetachars → ~0.67 |
 | T1.3 | `.host` entity for bare domains (formalize) | D-small | ~20 | low | cleanup; no metric move |
 | T1.4 | Healing: common long→short flag corrections | D-small | ~50 | medium | healing coverage; no metric move (CommandHealerTests only) |
-| T1.5 | `git_commit_push` + `build_and_test` compound templates | A | ~30 | low | Chained → ~0.83+ |
+| ~~T1.5~~ | ~~`git_commit_push` + `build_and_test` compound templates~~ | A | ~40 | low | **Shipped `ecccc2d`** — Chained 0.67 → 1.00 |
 | T1.6 | `awk_column` FILE slot: no-filename case emits `stdin` not `{FILE}` | C | ~5 | low | cleanup UX |
 | T1.7 | `.url` with query-string + fragment preservation | C | ~15 | low | WildCompoundEntities (curl_get tier) |
 | T1.8 | TerseWithFlags audit — missing `-n` / `-l` / `--long` patterns | B | variable | low | TerseWithFlags → ~0.80 |
