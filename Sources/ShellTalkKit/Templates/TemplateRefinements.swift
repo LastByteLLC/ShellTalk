@@ -67,7 +67,64 @@ public enum TemplateRefinements {
       ),
       "head_file": TemplateOverlay(
         addIntents: ["head FILE"],                                       // cand-020
+        negativeKeywords: ["folder", "directory"],                       // cand-1 (2026-04-23-wildtests)
         discriminators: ["head"]
+      ),
+      "ls_files": TemplateOverlay(
+        addIntents: [                                                    // cand-1 (2026-04-23-wildtests)
+          "first files in folder",
+          "first files in this folder",
+        ]
+      ),
+      "find_by_mtime": TemplateOverlay(
+        addIntents: ["logs from the past week"]                          // cand-1 (2026-04-23-wildtests)
+      ),
+      "top_snapshot": TemplateOverlay(
+        negativeKeywords: [                                              // cand-1 (2026-04-23-wildtests)
+          "largest", "biggest", "files", "directories",
+        ]
+      ),
+      "tar_create": TemplateOverlay(
+        negativeKeywords: ["first", "last"]                              // cand-1 (2026-04-23-wildtests)
+      ),
+      "docker_logs": TemplateOverlay(
+        negativeKeywords: [                                              // cand-1 (2026-04-23-wildtests); additive to built-in
+          "past", "week", "yesterday", "today", "ago",
+          "hour", "minute", "grep",
+        ]
+      ),
+      "kubectl_logs": TemplateOverlay(
+        negativeKeywords: [                                              // cand-1 (2026-04-23-wildtests)
+          "past", "week", "yesterday", "grep", "foo", "bar",
+        ]
+      ),
+      "sam_logs": TemplateOverlay(
+        negativeKeywords: ["past", "week", "yesterday", "grep"]          // cand-1 (2026-04-23-wildtests)
+      ),
+      "aws_logs_tail": TemplateOverlay(
+        negativeKeywords: ["past", "week", "yesterday", "grep"]          // cand-1 (2026-04-23-wildtests)
+      ),
+      "serverless_logs": TemplateOverlay(
+        negativeKeywords: ["past", "week", "yesterday", "grep"]          // cand-1 (2026-04-23-wildtests)
+      ),
+      "git_log_since": TemplateOverlay(
+        negativeKeywords: [                                              // cand-1 (2026-04-23-wildtests)
+          "without", "merges", "on", "origin", "master", "main",
+        ]
+      ),
+      "awk_column": TemplateOverlay(
+        addIntents: [                                                    // cand-1 (2026-04-23-wildtests)
+          "process csv",
+          "process csv file",
+          "process tab-separated file",
+        ],
+        discriminators: ["awk", "column"]                                // cand-010 (preserved)
+      ),
+      "grep_search": TemplateOverlay(
+        addIntents: [                                                    // cand-1 (2026-04-23-wildtests)
+          "grep in log files",
+          "grep pattern in logs",
+        ]
       ),
       "find_by_extension": TemplateOverlay(
         addIntents: [                                                    // cand-003 (2026-04-23-fileext)
@@ -93,9 +150,7 @@ public enum TemplateRefinements {
       "sed_replace": TemplateOverlay(
         discriminators: ["substitute", "replace"]                        // cand-009
       ),
-      "awk_column": TemplateOverlay(
-        discriminators: ["awk", "column"]                                // cand-010
-      ),
+      // awk_column entry consolidated above with cand-1 additions (CSV intents).
       "cut_columns": TemplateOverlay(
         negativeKeywords: ["extract"]                                    // cand-010
       ),
