@@ -94,10 +94,12 @@ public enum BuiltInTemplates {
         slots: [
           "PATH": SlotDefinition(type: .path, defaultValue: "."),
           // Captures: N days | N weeks | N months | N years | today | yesterday |
-          //           (past|last) (week|month|year)
-          // Sanitize converts unit words → day counts (week=7, month=30, year=365).
+          //           (past|last) (week|month|year) | (since) (weekday)
+          // Sanitize converts unit words and weekdays to day counts. The
+          // "N units ago" branch captures the FULL "N units" phrase
+          // (not just N) so the unit multiplier is preserved.
           "DAYS": SlotDefinition(type: .relativeDays, defaultValue: "1",
-            extractPattern: #"(?:last|past)\s+(\d+\s+days?|\d+\s+weeks?|\d+\s+months?|\d+\s+years?|week|month|year)|(\d+)\s+(?:days?|weeks?|months?|years?)\s+ago|(yesterday|today)"#),
+            extractPattern: #"(?:last|past)\s+(\d+\s+days?|\d+\s+weeks?|\d+\s+months?|\d+\s+years?|week|month|year)|(?:since|from)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)|(?:from\s+|since\s+)?(\d+\s+(?:days?|weeks?|months?|years?))\s+ago|(yesterday|today)"#),
         ],
         negativeKeywords: ["who", "blame", "author", "wrote"]
       ),
@@ -819,8 +821,12 @@ public enum BuiltInTemplates {
         ],
         command: "git log --oneline --since='{SINCE}' --author=\"$(git config user.name)\"",
         slots: [
+          // T1.1: tightened to match only known time anchors. Previously
+          // captured `\S*` which on "show today's commits" pulled the
+          // apostrophe-fragment "'s" → broken shell quoting. Now matches
+          // an explicit time word OR falls back to defaultValue.
           "SINCE": SlotDefinition(type: .string, defaultValue: "yesterday",
-            extractPattern: #"(?:since|from|yesterday|today)\s*(\S*)"#),
+            extractPattern: #"(?:since\s+|from\s+)?(yesterday|today|last\s+\w+|this\s+\w+|\d+\s+\w+\s+ago)"#),
         ]
       ),
       CommandTemplate(

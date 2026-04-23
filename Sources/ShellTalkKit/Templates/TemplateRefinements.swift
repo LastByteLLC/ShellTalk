@@ -77,7 +77,30 @@ public enum TemplateRefinements {
         ]
       ),
       "find_by_mtime": TemplateOverlay(
-        addIntents: ["logs from the past week"]                          // cand-1 (2026-04-23-wildtests)
+        addIntents: [
+          "logs from the past week",                                     // cand-1 (2026-04-23-wildtests)
+          // T1.1: weekday-anchored queries. 7 narrow intents, each
+          // unique enough that global BM25 perturbation is minimal (F2).
+          "what changed since monday",
+          "files changed since tuesday",
+          "files changed since wednesday",
+          "files changed since thursday",
+          "files changed since friday",
+          "files changed since saturday",
+          "files changed since sunday",
+          // "weeks ago" / "months ago" patterns — current intent list
+          // ends with "ago" only via "yesterday"; this routes the
+          // explicit count form.
+          "files from 2 weeks ago",
+          "files from N weeks ago",
+          "files from N months ago",
+        ]
+      ),
+      "find_by_mmin": TemplateOverlay(
+        // T1.1: "commits from the last hour" was hijacked by find_by_mmin
+        // because "last hour" is a strong file-mtime token. git_log is
+        // the right answer for queries about git commits.
+        negativeKeywords: ["commits", "git", "log", "branch"]            // T1.1 (2026-04-23-round-b)
       ),
       "top_snapshot": TemplateOverlay(
         negativeKeywords: [                                              // cand-1 (2026-04-23-wildtests)
@@ -172,7 +195,11 @@ public enum TemplateRefinements {
 
       // ───── git ─────────────────────────────────────────────────────
       "git_diff": TemplateOverlay(
-        discriminators: ["compare", "changes"]                           // cand-007
+        // T1.1: "what changed since Monday" was hijacked by git_diff
+        // because "what changed" is a strong git_diff anchor. Weekday
+        // tokens shouldn't pull queries here.
+        negativeKeywords: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
+        discriminators: ["compare", "changes"]                           // cand-007 (preserved)
       ),
       "git_pull": TemplateOverlay(
         // T1.5 side effect: git_commit_push perturbed BM25 enough that
@@ -185,8 +212,19 @@ public enum TemplateRefinements {
           "last N commits", "recent commits on branch",                  // cand-033
           "show commits on origin",                                      // cand-3 (2026-04-23-wildtests)
           "show commits on branch",
+          "commits from the last hour",                                  // T1.1 (2026-04-23-round-b)
+          "commits in the past hour",
+          "commits in the last hour",
+          "git log --oneline -n",                                        // T1.1 compensation: git_log_graph stealing
+          "display git log",
         ],
         discriminators: ["commits", "10", "5", "last"]
+      ),
+      "git_log_graph": TemplateOverlay(
+        // T1.1: BM25 ripple from new git_log intents made graph win for
+        // bare "git log" queries with flags. Push it back to require the
+        // graph/tree anchor.
+        negativeKeywords: ["--oneline", "-n", "display"]                 // T1.1 (2026-04-23-round-b)
       ),
       "git_branch_list": TemplateOverlay(
         negativeKeywords: ["commits", "see"]                             // cand-033

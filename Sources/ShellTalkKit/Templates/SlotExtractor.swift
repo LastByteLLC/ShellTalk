@@ -269,14 +269,34 @@ public struct SlotExtractor: Sendable {
 
   /// Convert human-readable time phrases into a day count suitable for
   /// `-mtime -N`. Accepts: "today", "yesterday", "week", "month", "year",
-  /// "N days", "N weeks", "N months", "N years" (case-insensitive).
-  /// Falls back to the input if no unit word is recognized.
+  /// "N days", "N weeks", "N months", "N years", or weekday names
+  /// (monday..sunday) which compute days-since-last-occurrence.
+  /// Case-insensitive. Falls back to the input if no unit word matches.
+  ///
+  /// Note: weekday-name resolution depends on the current date and is
+  /// therefore non-deterministic across days. Tests should assert
+  /// structure (`"-mtime"` present, slot is a digit) rather than a
+  /// specific day count.
   private func resolveRelativeDays(_ raw: String) -> String {
     let lower = raw.lowercased().trimmingCharacters(in: .whitespaces)
     if lower == "today" || lower == "yesterday" { return "1" }
     if lower == "week"  { return "7" }
     if lower == "month" { return "30" }
     if lower == "year"  { return "365" }
+
+    // Weekday names: days since the most recent occurrence.
+    // "Since monday" when today is Wednesday → 2 days. When today IS
+    // Monday → 7 (last week's Monday).
+    let weekdayMap: [String: Int] = [
+      "sunday": 1, "monday": 2, "tuesday": 3, "wednesday": 4,
+      "thursday": 5, "friday": 6, "saturday": 7,
+    ]
+    if let target = weekdayMap[lower] {
+      let cal = Calendar(identifier: .gregorian)
+      let today = cal.component(.weekday, from: Date())
+      let diff = (today - target + 7) % 7
+      return diff == 0 ? "7" : String(diff)
+    }
 
     // N unit form
     let pattern = #"^(\d+)\s+(days?|weeks?|months?|years?)$"#

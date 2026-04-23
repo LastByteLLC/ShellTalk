@@ -547,7 +547,7 @@ let allCases: [(String, [EvalCase])] = [
     // Slot assertions strengthened for cases where Cand-7 added unit conversion.
     EvalCase("files changed yesterday", template: "find_by_mtime", category: "file_ops", required: ["find", "-mtime -1"], slots: ["DAYS": "1"], "Time: 'yesterday' → -mtime -1"),
     EvalCase("what changed since Monday", template: "find_by_mtime", category: "file_ops", required: ["find", "-mtime"], "Time: named weekday anchor (deferred)"),
-    EvalCase("show today's commits", template: "git_log", category: "git", required: ["git log"], "Time: today's git log"),
+    EvalCase("show today's commits", template: "git_log_since", category: "git", required: ["git log", "--since"], "Time: today's git log → git_log_since (T1.1 gold-label correction)"),
     EvalCase("logs from the past week", template: "find_by_mtime", category: "file_ops", required: ["find", "-mtime -7"], slots: ["DAYS": "7"], "Time: past week → 7 (Cand-7)"),
     EvalCase("files from 2 weeks ago", template: "find_by_mtime", category: "file_ops", required: ["find", "-mtime"], "Time: N weeks ago (routing bug)"),
     EvalCase("commits from the last hour", template: "git_log", category: "git", required: ["git log"], "Time: git log --since last hour"),
