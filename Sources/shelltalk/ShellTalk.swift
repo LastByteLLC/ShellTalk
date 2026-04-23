@@ -66,11 +66,22 @@ struct ShellTalk: ParsableCommand {
 
     // Alternatives mode
     if alternatives {
-      let results = pipeline.processWithAlternatives(text, n: 5)
-      if results.isEmpty {
+      let raw = pipeline.processWithAlternatives(text, n: 5)
+      if raw.isEmpty {
         printError("No matching commands found for: \(text)")
         throw ExitCode.failure
       }
+      // Sort by confidence descending so the displayed rank matches the
+      // displayed score. `matchTopN` returns in BM25 template-score order,
+      // but `confidence = min(categoryScore, templateScore)` — these can
+      // disagree, producing [1] with score < [2]. Stable sort preserves
+      // original matcher order within ties.
+      let results = raw.enumerated().sorted { lhs, rhs in
+        if lhs.element.confidence != rhs.element.confidence {
+          return lhs.element.confidence > rhs.element.confidence
+        }
+        return lhs.offset < rhs.offset
+      }.map { $0.element }
       for (i, result) in results.enumerated() {
         let marker = i == 0 ? ">" : " "
         let safety = safetyIcon(result.validation?.safetyLevel)
