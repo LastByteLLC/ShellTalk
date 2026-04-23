@@ -542,14 +542,17 @@ let allCases: [(String, [EvalCase])] = [
   // real-world NL patterns ShellTalk handles today. Per-category pass
   // rate drives the next round of fix candidates.
   ("WildTimeExpressions", [
-    EvalCase("files changed yesterday", template: "find_by_mtime", category: "file_ops", required: ["find", "-mtime"], "Time: 'yesterday' → relative day"),
-    EvalCase("what changed since Monday", template: "find_by_mtime", category: "file_ops", required: ["find", "-mtime"], "Time: named weekday anchor"),
+    // Slot assertions strengthened for cases where Cand-7 added unit conversion.
+    EvalCase("files changed yesterday", template: "find_by_mtime", category: "file_ops", required: ["find", "-mtime -1"], slots: ["DAYS": "1"], "Time: 'yesterday' → -mtime -1"),
+    EvalCase("what changed since Monday", template: "find_by_mtime", category: "file_ops", required: ["find", "-mtime"], "Time: named weekday anchor (deferred)"),
     EvalCase("show today's commits", template: "git_log", category: "git", required: ["git log"], "Time: today's git log"),
-    EvalCase("logs from the past week", template: "find_by_mtime", category: "file_ops", required: ["find", "-mtime"], "Time: past week"),
-    EvalCase("files from 2 weeks ago", template: "find_by_mtime", category: "file_ops", required: ["find", "-mtime"], "Time: N weeks ago"),
+    EvalCase("logs from the past week", template: "find_by_mtime", category: "file_ops", required: ["find", "-mtime -7"], slots: ["DAYS": "7"], "Time: past week → 7 (Cand-7)"),
+    EvalCase("files from 2 weeks ago", template: "find_by_mtime", category: "file_ops", required: ["find", "-mtime"], "Time: N weeks ago (routing bug)"),
     EvalCase("commits from the last hour", template: "git_log", category: "git", required: ["git log"], "Time: git log --since last hour"),
     EvalCase("modified in the past 24 hours", template: "find_by_mmin_hours", category: "file_ops", required: ["find"], "Time: past 24 hours"),
-    EvalCase("edited today", template: "find_by_mtime", category: "file_ops", required: ["find", "-mtime"], "Time: 'today' synonym"),
+    EvalCase("edited today", template: "find_by_mtime", category: "file_ops", required: ["find", "-mtime -1"], slots: ["DAYS": "1"], "Time: 'today' → -mtime -1"),
+    // New: past month should become -mtime -30 (Cand-7).
+    EvalCase("files modified in the past month", template: "find_by_mtime", category: "file_ops", required: ["find", "-mtime -30"], slots: ["DAYS": "30"], "Time: past month → 30"),
   ]),
 
   ("WildNegations", [

@@ -93,8 +93,11 @@ public enum BuiltInTemplates {
         command: "find {PATH} -type f -mtime -{DAYS}",
         slots: [
           "PATH": SlotDefinition(type: .path, defaultValue: "."),
-          "DAYS": SlotDefinition(type: .number, defaultValue: "1",
-            extractPattern: #"(?:last|past)\s+(\d+)\s+days?|(\d+)\s+days?\s+ago"#),
+          // Captures: N days | N weeks | N months | N years | today | yesterday |
+          //           (past|last) (week|month|year)
+          // Sanitize converts unit words → day counts (week=7, month=30, year=365).
+          "DAYS": SlotDefinition(type: .relativeDays, defaultValue: "1",
+            extractPattern: #"(?:last|past)\s+(\d+\s+days?|\d+\s+weeks?|\d+\s+months?|\d+\s+years?|week|month|year)|(\d+)\s+(?:days?|weeks?|months?|years?)\s+ago|(yesterday|today)"#),
         ],
         negativeKeywords: ["who", "blame", "author", "wrote"]
       ),
@@ -146,8 +149,8 @@ public enum BuiltInTemplates {
         command: "find {PATH} -type f -size +{SIZE} | head -20",
         slots: [
           "PATH": SlotDefinition(type: .path, defaultValue: "."),
-          "SIZE": SlotDefinition(type: .string, defaultValue: "1M",
-            extractPattern: #"(?:larger|bigger|over|above)\s+(?:than\s+)?(\d+[kKmMgG]?[bB]?)"#),
+          "SIZE": SlotDefinition(type: .fileSize, defaultValue: "1M",
+            extractPattern: #"(?:larger|bigger|over|above)\s+(?:than\s+)?(\d+[kKmMgGtT]?[bB]?)"#),
         ]
       ),
       CommandTemplate(

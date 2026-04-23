@@ -81,6 +81,13 @@ public struct SlotExtractor: Sendable {
   private func isNoiseValue(_ value: String, type: SlotType) -> Bool {
     let lowered = value.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
 
+    // File-size slots must be digits with optional K/M/G/T + optional B.
+    // Reject anything else ("top", "biggest", bare words) so defaultValue
+    // fires instead of emitting a malformed `-size +top`.
+    if type == .fileSize {
+      return lowered.range(of: #"^\d+[kmgt]?b?$"#, options: .regularExpression) == nil
+    }
+
     // Single stop words are never valid slot values
     if Self.slotStopWords.contains(lowered) {
       return true
@@ -255,9 +262,41 @@ public struct SlotExtractor: Sendable {
       return extractURL(from: query)
     case .branch:
       return extractBranch(from: query)
-    case .pattern, .string, .command, .fileExtension:
+    case .pattern, .string, .command, .fileExtension, .fileSize, .relativeDays:
       return nil
     }
+  }
+
+  /// Convert human-readable time phrases into a day count suitable for
+  /// `-mtime -N`. Accepts: "today", "yesterday", "week", "month", "year",
+  /// "N days", "N weeks", "N months", "N years" (case-insensitive).
+  /// Falls back to the input if no unit word is recognized.
+  private func resolveRelativeDays(_ raw: String) -> String {
+    let lower = raw.lowercased().trimmingCharacters(in: .whitespaces)
+    if lower == "today" || lower == "yesterday" { return "1" }
+    if lower == "week"  { return "7" }
+    if lower == "month" { return "30" }
+    if lower == "year"  { return "365" }
+
+    // N unit form
+    let pattern = #"^(\d+)\s+(days?|weeks?|months?|years?)$"#
+    if let match = lower.range(of: pattern, options: .regularExpression) {
+      let body = String(lower[match])
+      let parts = body.split(separator: " ")
+      if parts.count == 2, let n = Int(parts[0]) {
+        let unit = String(parts[1])
+        let mult: Int = unit.hasPrefix("week")  ? 7
+                       : unit.hasPrefix("month") ? 30
+                       : unit.hasPrefix("year")  ? 365
+                       : 1
+        return String(n * mult)
+      }
+    }
+
+    // If it's already a plain integer, return as-is.
+    if Int(lower) != nil { return lower }
+    // Unrecognized → let the extractor fall through to defaultValue via isNoiseValue.
+    return raw
   }
 
   private func extractPath(from query: String) -> String? {
@@ -310,6 +349,8 @@ public struct SlotExtractor: Sendable {
       }
     case .fileExtension:
       cleaned = FileExtensionAliases.resolve(cleaned)
+    case .relativeDays:
+      cleaned = resolveRelativeDays(cleaned)
     default:
       break
     }

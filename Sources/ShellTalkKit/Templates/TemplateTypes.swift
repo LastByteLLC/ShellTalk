@@ -98,6 +98,8 @@ public enum SlotType: String, Sendable, Codable {
   case pattern      // Regex or search pattern
   case command      // A sub-command
   case fileExtension // File extension, canonicalized (markdown→md, javascript→js)
+  case fileSize     // Byte size with optional unit: "100M", "1G", "512K"
+  case relativeDays // Day count converted from unit words: "week"→"7", "month"→"30"
 }
 
 /// An optional flag that can be appended to a command.
