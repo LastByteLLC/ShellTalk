@@ -114,9 +114,10 @@ struct STMAccuracyTests {
     }
 
     // File-format-name → on-disk extension canonicalization.
-    // Only cases that route to `find_by_extension` are asserted here;
-    // routing-failed cases (JavaScript, Ruby, Golang, HTML, CONFIG, .ts-dot-form)
-    // are stm-eval-only pending Cand-003 routing refinements.
+    // Covers both slot-type canonicalization (Cand-002) and routing
+    // refinement (Cand-003). "find CONFIG files" remains stm-eval-only —
+    // generic-unknown-token routing to find_by_name is a larger problem
+    // not addressed here.
     @Test("File extension canonicalization (format-name → on-disk ext)")
     func fileExtensionAliases() {
       expectTemplate("find all Markdown files", "find_by_extension")
@@ -131,6 +132,18 @@ struct STMAccuracyTests {
       expectCommand("find YAML files", contains: "'*.yaml'")
       expectCommand("find MARKDOWN files", contains: "'*.md'")
       expectCommand("find all PYTHON files", contains: "'*.py'")
+
+      // Routing-refinement cases (Cand-003).
+      expectTemplate("list JavaScript files", "find_by_extension")
+      expectCommand("list JavaScript files", contains: "'*.js'")
+      expectTemplate("find Ruby files", "find_by_extension")
+      expectCommand("find Ruby files", contains: "'*.rb'")
+      expectTemplate("find all Golang files", "find_by_extension")
+      expectCommand("find all Golang files", contains: "'*.go'")
+      expectTemplate("list all .ts files", "find_by_extension")
+      expectCommand("list all .ts files", contains: "'*.ts'")
+      expectTemplate("find HTML files", "find_by_extension")
+      expectCommand("find HTML files", contains: "'*.html'")
     }
 
     @Test("Git operations in natural language")

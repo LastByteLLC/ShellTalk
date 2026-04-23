@@ -69,6 +69,25 @@ public enum TemplateRefinements {
         addIntents: ["head FILE"],                                       // cand-020
         discriminators: ["head"]
       ),
+      "find_by_extension": TemplateOverlay(
+        addIntents: [                                                    // cand-003 (2026-04-23-fileext)
+          // F5-class format-name routing: grep_search was outranking
+          // find_by_extension on "find X files" queries where X is a
+          // language name. Narrow low-frequency tokens — minimal global
+          // BM25 perturbation per F2.
+          "find ruby files",
+          "find golang files",
+          "find html files",
+          "find kotlin files",
+          "find shell files",
+          "find bash files",
+          // F6-class: "list" anchors ls_files. Surgical — only the
+          // specific failing queries. Broader "list X files" patterns
+          // regressed "yo list my files bro" (NegativeEdge).
+          "list javascript files",
+          "list all .ts files",
+        ]
+      ),
 
       // ───── text_processing ─────────────────────────────────────────
       "sed_replace": TemplateOverlay(
