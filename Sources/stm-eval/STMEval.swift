@@ -536,6 +536,82 @@ let allCases: [(String, [EvalCase])] = [
     EvalCase("build and test", template: "swift_test", category: "dev_tools", required: ["swift test"], "Chained: build+test"),
     EvalCase("pull and merge develop", template: "git_pull", category: "git", required: ["git pull"], "Chained: pull+merge"),
   ]),
+
+  // MARK: Wild — Real-world patterns probing coverage gaps
+  // These are NOT expected to all pass on main. Purpose: measure which
+  // real-world NL patterns ShellTalk handles today. Per-category pass
+  // rate drives the next round of fix candidates.
+  ("WildTimeExpressions", [
+    EvalCase("files changed yesterday", template: "find_by_mtime", category: "file_ops", required: ["find", "-mtime"], "Time: 'yesterday' → relative day"),
+    EvalCase("what changed since Monday", template: "find_by_mtime", category: "file_ops", required: ["find", "-mtime"], "Time: named weekday anchor"),
+    EvalCase("show today's commits", template: "git_log", category: "git", required: ["git log"], "Time: today's git log"),
+    EvalCase("logs from the past week", template: "find_by_mtime", category: "file_ops", required: ["find", "-mtime"], "Time: past week"),
+    EvalCase("files from 2 weeks ago", template: "find_by_mtime", category: "file_ops", required: ["find", "-mtime"], "Time: N weeks ago"),
+    EvalCase("commits from the last hour", template: "git_log", category: "git", required: ["git log"], "Time: git log --since last hour"),
+    EvalCase("modified in the past 24 hours", template: "find_by_mmin_hours", category: "file_ops", required: ["find"], "Time: past 24 hours"),
+    EvalCase("edited today", template: "find_by_mtime", category: "file_ops", required: ["find", "-mtime"], "Time: 'today' synonym"),
+  ]),
+
+  ("WildNegations", [
+    EvalCase("list files except hidden", template: "ls_files", category: "file_ops", required: ["ls"], forbidden: ["-a"], "Negation: except hidden"),
+    EvalCase("show commits without merges", template: "git_log", category: "git", required: ["git log"], "Negation: --no-merges"),
+    EvalCase("find files not ending in .log", template: "find_by_name", category: "file_ops", required: ["find"], "Negation: not ending in ext"),
+    EvalCase("grep errors but not warnings", template: "grep_search", category: "text_processing", required: ["grep"], "Negation: grep -v warning"),
+    EvalCase("find everything except node_modules", template: "find_by_name", category: "file_ops", required: ["find"], "Negation: except dir"),
+    EvalCase("show branches except main", template: "git_branch_list", category: "git", required: ["git branch"], "Negation: branches except X"),
+  ]),
+
+  ("WildPoliteness", [
+    EvalCase("could you please find all swift files", template: "find_by_extension", category: "file_ops", required: ["find", "'*.swift'"], "Polite: find swift"),
+    EvalCase("would you kindly show me disk usage", template: "du_disk_usage", category: "file_ops", required: ["du"], "Polite: disk usage"),
+    EvalCase("I'd really appreciate if you could list python files", template: "find_by_extension", category: "file_ops", required: ["find", "'*.py'"], "Polite: list python"),
+    EvalCase("please show git status", template: "git_status", category: "git", required: ["git status"], "Polite: bare please"),
+    EvalCase("hey could you show me what changed", template: "git_status", category: "git", required: ["git"], "Polite: informal hey"),
+    EvalCase("can u show me files bigger than 10mb please", template: "find_large_files", category: "file_ops", required: ["find", "-size"], "Polite: txtspeak"),
+  ]),
+
+  ("WildMultiSource", [
+    EvalCase("diff config.old and config.new", template: "diff_files", category: "file_ops", required: ["diff"], "Multi: two file args"),
+    EvalCase("copy README.md and LICENSE to archive/", template: "cp_file", category: "file_ops", required: ["cp"], "Multi: two sources"),
+    EvalCase("move a.txt and b.txt to backup/", template: "mv_file", category: "file_ops", required: ["mv"], "Multi: two sources mv"),
+    EvalCase("compare old.config to new.config", template: "diff_files", category: "file_ops", required: ["diff"], "Multi: compare X to Y"),
+    EvalCase("grep foo and bar in logs", template: "grep_search", category: "text_processing", required: ["grep"], "Multi: two patterns grep"),
+  ]),
+
+  ("WildCompoundEntities", [
+    EvalCase("switch to feature/auth-redesign", template: "git_switch", category: "git", required: ["git switch", "feature/auth-redesign"], slots: ["BRANCH": "feature/auth-redesign"], "Compound: branch with hyphen+slash"),
+    EvalCase("find files in My Documents", template: "ls_files", category: "file_ops", required: ["ls"], "Compound: path with space"),
+    EvalCase("curl https://api.example.com/users?filter=active", template: "curl_get", category: "network", required: ["curl"], "Compound: URL with query string"),
+    EvalCase("ssh to my-server.internal", template: "ssh_connect", category: "network", required: ["ssh"], "Compound: host with hyphen + TLD"),
+    EvalCase("show commits on origin/main", template: "git_log", category: "git", required: ["git log"], "Compound: remote branch ref"),
+    EvalCase("ping example.com", template: "ping_host", category: "network", required: ["ping", "example.com"], "Compound: bare domain host"),
+  ]),
+
+  ("WildOrdinals", [
+    EvalCase("show the top 3 largest files", template: "find_large_files", category: "file_ops", required: ["find"], "Ordinal: top N"),
+    EvalCase("first 10 files in this folder", template: "ls_files", category: "file_ops", required: ["ls"], "Ordinal: first N"),
+    EvalCase("most recent commit", template: "git_log", category: "git", required: ["git log"], "Ordinal: superlative single"),
+    EvalCase("biggest 5 directories", template: "du_disk_usage", category: "file_ops", required: ["du"], "Ordinal: biggest N dirs"),
+  ]),
+
+  ("WildRanges", [
+    EvalCase("files between 10MB and 100MB", template: "find_large_files", category: "file_ops", required: ["find", "-size"], "Range: size between"),
+    EvalCase("commits between v1.0 and v2.0", template: "git_log", category: "git", required: ["git log"], "Range: git tag range"),
+    EvalCase("files larger than 1 GiB", template: "find_large_files", category: "file_ops", required: ["find", "-size"], "Range: GiB unit"),
+  ]),
+
+  ("WildShellMetachars", [
+    EvalCase("grep 'error|warning' in log.txt", template: "grep_search", category: "text_processing", required: ["grep"], "Metachar: regex pipe"),
+    EvalCase("find files with HOME in their name", template: "find_by_name", category: "file_ops", required: ["find"], "Metachar: env-var-looking token"),
+    EvalCase("search for hello world", template: "grep_search", category: "text_processing", required: ["grep"], "Metachar: unquoted multi-token"),
+  ]),
+
+  ("WildEntityGaps", [
+    EvalCase("install express package", template: "npm_install", category: "packages", required: ["npm install"], slots: ["PACKAGE": "express"], "Entity: .packageName never populated"),
+    EvalCase("connect to example.com", template: "ssh_connect", category: "network", required: ["ssh"], "Entity: bare domain host"),
+    EvalCase("ping my-host.local", template: "ping_host", category: "network", required: ["ping"], "Entity: .local TLD host"),
+    EvalCase("show last 42 commits", template: "git_log", category: "git", required: ["git log"], slots: ["COUNT": "42"], "Entity: .number bare integer"),
+  ]),
 ]
 
 // MARK: - CLI args
