@@ -126,6 +126,21 @@ public enum TemplateRefinements {
           "grep pattern in logs",
         ]
       ),
+      "npm_install": TemplateOverlay(
+        addIntents: [                                                    // cand-9 (2026-04-23-round-a)
+          // Specific JS-ecosystem package phrases. Narrow enough to not
+          // leak into non-JS "install X" queries ("install vim package",
+          // "install typescript" without "package", etc.).
+          "install express package",
+          "install react package",
+          "install lodash package",
+          "install vue package",
+          "install angular package",
+          "install webpack package",
+          "install eslint package",
+        ],
+        discriminators: ["install", "add"]                               // preserved
+      ),
       "find_by_extension": TemplateOverlay(
         addIntents: [                                                    // cand-003 (2026-04-23-fileext)
           // F5-class format-name routing: grep_search was outranking

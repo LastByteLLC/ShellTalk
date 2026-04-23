@@ -938,8 +938,10 @@ public enum BuiltInTemplates {
         slots: [
           "COL": SlotDefinition(type: .number, defaultValue: "1",
             extractPattern: #"(?:column|field|col)\s+(\d+)"#),
-          "FILE": SlotDefinition(type: .path,
-            extractPattern: #"(?:from|in|of)\s+(\S+)"#),
+          // Widened to also catch "the X file" / "X.csv" / "X.tsv" / "X.log"
+          // patterns common in "process the csv file"-style queries.
+          "FILE": SlotDefinition(type: .path, defaultValue: "{FILE}",
+            extractPattern: #"(?:from|in|of)\s+(\S+)|the\s+(\S+\.(?:csv|tsv|txt|log|out))|(\S+\.(?:csv|tsv|txt|log|out))"#),
         ]
       ),
       CommandTemplate(
