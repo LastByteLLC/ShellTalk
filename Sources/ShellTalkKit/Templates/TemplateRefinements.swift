@@ -174,6 +174,12 @@ public enum TemplateRefinements {
       "git_diff": TemplateOverlay(
         discriminators: ["compare", "changes"]                           // cand-007
       ),
+      "git_pull": TemplateOverlay(
+        // T1.5 side effect: git_commit_push perturbed BM25 enough that
+        // git_pull (intent: "fetch and merge") beats curl_get on
+        // "fetch https://…" queries. Domains/URLs are never a git-pull.
+        negativeKeywords: ["http", "https", "url", "api"]                // T1.5 (2026-04-23-round-b)
+      ),
       "git_log": TemplateOverlay(
         addIntents: [
           "last N commits", "recent commits on branch",                  // cand-033

@@ -531,10 +531,12 @@ let allCases: [(String, [EvalCase])] = [
 
   // MARK: Adversarial — Chained intent
   ("Chained", [
-    // Chained queries — accept either intent's match
-    EvalCase("commit and push", template: "git_push", category: "git", required: ["git push"], "Chained: commit+push"),
-    EvalCase("build and test", template: "swift_test", category: "dev_tools", required: ["swift test"], "Chained: build+test"),
-    EvalCase("pull and merge develop", template: "git_pull", category: "git", required: ["git pull"], "Chained: pull+merge"),
+    // Gold labels updated (T1.5) to target compound templates that emit
+    // &&-joined commands. "pull and merge" stays on git_pull because
+    // `git pull` is already fetch+merge.
+    EvalCase("commit and push", template: "git_commit_push", category: "git", required: ["git commit", "git push"], "Chained: commit+push compound (T1.5)"),
+    EvalCase("build and test", template: "swift_build_and_test", category: "dev_tools", required: ["swift build", "swift test"], "Chained: build+test compound (T1.5)"),
+    EvalCase("pull and merge develop", template: "git_pull", category: "git", required: ["git pull"], "Chained: pull (git pull = fetch+merge already)"),
   ]),
 
   // MARK: Wild — Real-world patterns probing coverage gaps

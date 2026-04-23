@@ -660,6 +660,23 @@ public enum BuiltInTemplates {
         command: "git push"
       ),
       CommandTemplate(
+        // Compound: commit-then-push. Deterministic (no planner) — pure
+        // phrase match on "commit and push" pattern. MESSAGE defaults to
+        // "wip" which is a common placeholder; user can override via
+        // explicit message in the query.
+        id: "git_commit_push",
+        intents: [
+          "commit and push", "commit then push", "git commit and push",
+          "commit changes and push", "add commit push", "stage commit push",
+        ],
+        command: "git commit -m \"{MESSAGE}\" && git push",
+        slots: [
+          "MESSAGE": SlotDefinition(type: .string, defaultValue: "wip",
+            extractPattern: #"(?:with\s+message|message|-m)\s+['\"]?(.+?)['\"]?(?:$|\s+and)"#),
+        ],
+        negativeKeywords: ["pull"]
+      ),
+      CommandTemplate(
         id: "git_blame",
         intents: [
           "git blame", "who changed this", "blame file",
@@ -1137,6 +1154,18 @@ public enum BuiltInTemplates {
           "FLAGS": SlotDefinition(type: .string, defaultValue: ""),
         ],
         negativeKeywords: ["mkdir", "fixtures", "directory", "folder", "create", "make"]
+      ),
+      CommandTemplate(
+        // Compound: swift build && swift test. Ships a correct end-to-end
+        // command for "build and test" queries; previously routed to
+        // solo swift_test which skipped the build step.
+        id: "swift_build_and_test",
+        intents: [
+          "build and test", "build and run tests", "compile and test",
+          "build then test", "swift build and test",
+        ],
+        command: "swift build && swift test",
+        negativeKeywords: ["go", "cargo", "npm", "python", "docker"]
       ),
       CommandTemplate(
         id: "swift_run",
