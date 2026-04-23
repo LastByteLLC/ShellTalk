@@ -92,6 +92,38 @@ let allCases: [(String, [EvalCase])] = [
     EvalCase("who owns this file", template: "chown_owner", category: "file_ops", required: ["chown"], "Natural: file owner"),
   ]),
 
+  ("FileExtensions", [
+    // Format-name aliases (failing on baseline; canonicalize on Cand-002).
+    // Required substrings use quoted form "'*.md'" to avoid false-positive
+    // matches (e.g. baseline "*.markdown" does NOT contain "'*.md'" but
+    // WOULD contain bare "*.md").
+    EvalCase("find all Markdown files", template: "find_by_extension", category: "file_ops", required: ["find", "'*.md'"], slots: ["EXT": "md"], "Alias: Markdown→md (capitalized)"),
+    EvalCase("find markdown files", template: "find_by_extension", category: "file_ops", required: ["find", "'*.md'"], slots: ["EXT": "md"], "Alias: markdown→md (lowercase)"),
+    EvalCase("list JavaScript files", template: "find_by_extension", category: "file_ops", required: ["find", "'*.js'"], slots: ["EXT": "js"], "Alias: JavaScript→js"),
+    EvalCase("find all TypeScript files", template: "find_by_extension", category: "file_ops", required: ["find", "'*.ts'"], slots: ["EXT": "ts"], "Alias: TypeScript→ts"),
+    EvalCase("find Python files", template: "find_by_extension", category: "file_ops", required: ["find", "'*.py'"], slots: ["EXT": "py"], "Alias: Python→py"),
+    EvalCase("list all Python files", template: "find_by_extension", category: "file_ops", required: ["find", "'*.py'"], slots: ["EXT": "py"], "Alias: Python (with 'all')"),
+    EvalCase("find Ruby files", template: "find_by_extension", category: "file_ops", required: ["find", "'*.rb'"], slots: ["EXT": "rb"], "Alias: Ruby→rb"),
+    EvalCase("find all Golang files", template: "find_by_extension", category: "file_ops", required: ["find", "'*.go'"], slots: ["EXT": "go"], "Alias: Golang→go"),
+    EvalCase("find Rust files", template: "find_by_extension", category: "file_ops", required: ["find", "'*.rs'"], slots: ["EXT": "rs"], "Alias: Rust→rs"),
+    EvalCase("find Kotlin files", template: "find_by_extension", category: "file_ops", required: ["find", "'*.kt'"], slots: ["EXT": "kt"], "Alias: Kotlin→kt"),
+    EvalCase("find shell files", template: "find_by_extension", category: "file_ops", required: ["find", "'*.sh'"], slots: ["EXT": "sh"], "Alias: shell→sh"),
+
+    // Case normalization — uppercase input should lowercase before lookup.
+    EvalCase("find YAML files", template: "find_by_extension", category: "file_ops", required: ["find", "'*.yaml'"], slots: ["EXT": "yaml"], "Case: YAML→yaml (identity, lowercased)"),
+    EvalCase("find MARKDOWN files", template: "find_by_extension", category: "file_ops", required: ["find", "'*.md'"], slots: ["EXT": "md"], "Case+alias: MARKDOWN→md"),
+    EvalCase("find all PYTHON files", template: "find_by_extension", category: "file_ops", required: ["find", "'*.py'"], slots: ["EXT": "py"], "Case+alias: PYTHON→py"),
+
+    // Identity fallback — unknown format name is lowercased (not mangled).
+    EvalCase("find CONFIG files", template: "find_by_extension", category: "file_ops", required: ["find", "'*.config'"], slots: ["EXT": "config"], "Identity fallback: unknown uppercase lowercases"),
+
+    // Dot-prefix form exercises regex's second alternation.
+    EvalCase("list all .ts files", template: "find_by_extension", category: "file_ops", required: ["find", "'*.ts'"], slots: ["EXT": "ts"], "Dot form: .ts (identity)"),
+
+    // Identity: known-short lowercase format name should be unchanged.
+    EvalCase("find HTML files", template: "find_by_extension", category: "file_ops", required: ["find", "'*.html'"], slots: ["EXT": "html"], "Case+identity: HTML→html"),
+  ]),
+
   ("Git", [
     EvalCase("git status", template: "git_status", category: "git", required: ["git status"], "Terse"),
     EvalCase("what files have I changed", template: "git_status", category: "git", required: ["git status"], "Natural"),
