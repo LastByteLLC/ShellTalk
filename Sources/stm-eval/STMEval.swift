@@ -554,7 +554,7 @@ let allCases: [(String, [EvalCase])] = [
 
   ("WildNegations", [
     EvalCase("list files except hidden", template: "ls_files", category: "file_ops", required: ["ls"], forbidden: ["-a"], "Negation: except hidden"),
-    EvalCase("show commits without merges", template: "git_log", category: "git", required: ["git log"], "Negation: --no-merges"),
+    EvalCase("show commits without merges", template: "git_log_no_merges", category: "git", required: ["git log", "--no-merges"], "Negation: --no-merges (Cand-3 new template)"),
     EvalCase("find files not ending in .log", template: "find_by_name", category: "file_ops", required: ["find"], "Negation: not ending in ext"),
     EvalCase("grep errors but not warnings", template: "grep_search", category: "text_processing", required: ["grep"], "Negation: grep -v warning"),
     EvalCase("find everything except node_modules", template: "find_by_name", category: "file_ops", required: ["find"], "Negation: except dir"),
@@ -595,8 +595,9 @@ let allCases: [(String, [EvalCase])] = [
   ]),
 
   ("WildRanges", [
-    EvalCase("files between 10MB and 100MB", template: "find_large_files", category: "file_ops", required: ["find", "-size"], "Range: size between"),
-    EvalCase("commits between v1.0 and v2.0", template: "git_log", category: "git", required: ["git log"], "Range: git tag range"),
+    // Gold labels updated to target the new range templates (Cand-3).
+    EvalCase("files between 10MB and 100MB", template: "find_size_range", category: "file_ops", required: ["find", "-size +", "-size -"], slots: ["MIN_SIZE": "10MB", "MAX_SIZE": "100MB"], "Range: size between"),
+    EvalCase("commits between v1.0 and v2.0", template: "git_log_range", category: "git", required: ["git log", "v1.0..v2.0"], slots: ["FROM": "v1.0", "TO": "v2.0"], "Range: git tag range"),
     EvalCase("files larger than 1 GiB", template: "find_large_files", category: "file_ops", required: ["find", "-size"], "Range: GiB unit"),
   ]),
 

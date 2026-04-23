@@ -151,6 +151,25 @@ public enum BuiltInTemplates {
         ]
       ),
       CommandTemplate(
+        id: "find_size_range",
+        intents: [
+          // Narrow: require "between" + size unit to minimize BM25 overlap
+          // with find_large_files on single-bound queries.
+          "files between sizes",
+          "files between 10mb and 100mb",
+          "size bounded files between",
+        ],
+        command: "find {PATH} -type f -size +{MIN_SIZE} -size -{MAX_SIZE}",
+        slots: [
+          "PATH": SlotDefinition(type: .path, defaultValue: "."),
+          "MIN_SIZE": SlotDefinition(type: .string, defaultValue: "1M",
+            extractPattern: #"between\s+(\d+[kKmMgG]?[bB]?)\s+and\s+\d+[kKmMgG]?[bB]?"#),
+          "MAX_SIZE": SlotDefinition(type: .string, defaultValue: "100M",
+            extractPattern: #"between\s+\d+[kKmMgG]?[bB]?\s+and\s+(\d+[kKmMgG]?[bB]?)"#),
+        ],
+        negativeKeywords: ["larger than", "bigger than", "over", "huge"]
+      ),
+      CommandTemplate(
         id: "cp_file",
         intents: [
           "copy file", "copy files", "duplicate file",
@@ -472,6 +491,40 @@ public enum BuiltInTemplates {
         slots: [
           "COUNT": SlotDefinition(type: .number, defaultValue: "30"),
         ]
+      ),
+      CommandTemplate(
+        id: "git_log_range",
+        intents: [
+          // Narrow: require "between" explicitly. "git log between" was
+          // colliding with "git log --oneline -n 10" via shared tokens.
+          "commits between two refs",
+          "range between commits",
+          "commits between revisions",
+        ],
+        command: "git log --oneline {FROM}..{TO}",
+        slots: [
+          "FROM": SlotDefinition(type: .string, defaultValue: "HEAD~10",
+            extractPattern: #"between\s+(\S+)\s+and\s+\S+"#),
+          "TO": SlotDefinition(type: .string, defaultValue: "HEAD",
+            extractPattern: #"between\s+\S+\s+and\s+(\S+)"#),
+        ],
+        negativeKeywords: ["tag", "display", "status", "--oneline", "-n"]
+      ),
+      CommandTemplate(
+        id: "git_log_no_merges",
+        intents: [
+          // Narrow: "merges" / "no-merges" as the anchor, not generic "commits".
+          "commits without merges",
+          "git log no merges",
+          "git log without merge commits",
+          "non-merge commits",
+        ],
+        command: "git log --oneline --no-merges -n {COUNT}",
+        slots: [
+          "COUNT": SlotDefinition(type: .number, defaultValue: "20",
+            extractPattern: #"(?:last|recent|past)\s+(\d+)"#),
+        ],
+        negativeKeywords: ["origin", "branch", "tag", "display"]
       ),
       CommandTemplate(
         id: "git_add",

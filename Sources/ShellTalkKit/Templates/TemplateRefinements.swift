@@ -160,7 +160,11 @@ public enum TemplateRefinements {
         discriminators: ["compare", "changes"]                           // cand-007
       ),
       "git_log": TemplateOverlay(
-        addIntents: ["last N commits", "recent commits on branch"],      // cand-033
+        addIntents: [
+          "last N commits", "recent commits on branch",                  // cand-033
+          "show commits on origin",                                      // cand-3 (2026-04-23-wildtests)
+          "show commits on branch",
+        ],
         discriminators: ["commits", "10", "5", "last"]
       ),
       "git_branch_list": TemplateOverlay(
