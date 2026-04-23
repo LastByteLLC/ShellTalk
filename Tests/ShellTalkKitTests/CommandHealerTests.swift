@@ -99,6 +99,88 @@ struct CommandHealerTests {
     #expect(result.command.contains("gsed"))
   }
 
+  // MARK: - Typo correction (cand-2 wildtests audit)
+
+  @Test("Heals typo 'gti' -> 'git' via edit distance 1")
+  func typoCorrectionSingle() {
+    let profile = SystemProfile(
+      os: .macOS, arch: "arm64", osVersion: "1.0", shell: .zsh, packageManager: .brew,
+      availableCommands: ["git", "grep", "find"],
+      commandPaths: [:], commandVersions: [:], gnuOverrides: [:], missingAlternatives: [:]
+    )
+    let healer = CommandHealer(profile: profile)
+    let result = healer.heal(
+      original: "gti status",
+      result: ShellResult(stdout: "", stderr: "zsh: command not found: gti", exitCode: 127)
+    )
+    #expect(result.healed)
+    #expect(result.command == "git status")
+    #expect(result.explanation.contains("did you mean 'git'"))
+  }
+
+  @Test("Heals transposition 'grpe' -> 'grep'")
+  func typoCorrectionTransposition() {
+    let profile = SystemProfile(
+      os: .macOS, arch: "arm64", osVersion: "1.0", shell: .zsh, packageManager: .brew,
+      availableCommands: ["git", "grep", "find"],
+      commandPaths: [:], commandVersions: [:], gnuOverrides: [:], missingAlternatives: [:]
+    )
+    let healer = CommandHealer(profile: profile)
+    let result = healer.heal(
+      original: "grpe foo file.txt",
+      result: ShellResult(stdout: "", stderr: "command not found: grpe", exitCode: 127)
+    )
+    #expect(result.healed)
+    #expect(result.command.hasPrefix("grep "))
+  }
+
+  @Test("Does not correct too-short typos (avoid false matches)")
+  func typoCorrectionShortGuard() {
+    let profile = SystemProfile(
+      os: .macOS, arch: "arm64", osVersion: "1.0", shell: .zsh, packageManager: .brew,
+      availableCommands: ["git", "grep", "find", "ls"],
+      commandPaths: [:], commandVersions: [:], gnuOverrides: [:], missingAlternatives: [:]
+    )
+    let healer = CommandHealer(profile: profile)
+    let result = healer.heal(
+      original: "xy",
+      result: ShellResult(stdout: "", stderr: "command not found: xy", exitCode: 127)
+    )
+    // 2-char typo should NOT match — too many false positives.
+    #expect(!result.healed)
+  }
+
+  @Test("Prefers known alternative over typo correction")
+  func alternativeBeatsTypo() {
+    let profile = SystemProfile(
+      os: .macOS, arch: "arm64", osVersion: "1.0", shell: .zsh, packageManager: .brew,
+      availableCommands: ["curl", "git"],
+      commandPaths: [:], commandVersions: [:], gnuOverrides: [:],
+      missingAlternatives: ["wget": "curl -LO"]
+    )
+    let healer = CommandHealer(profile: profile)
+    let result = healer.heal(
+      original: "wget https://example.com/f",
+      result: ShellResult(stdout: "", stderr: "command not found: wget", exitCode: 127)
+    )
+    #expect(result.healed)
+    #expect(result.command.contains("curl -LO"))
+  }
+
+  @Test("Timeout classified distinctly from networkError")
+  func timeoutClassification() {
+    let healer = makeHealer(os: .macOS)
+    let catTimeout = healer.classifyError(
+      stderr: "curl: (28) Connection timed out after 5000 milliseconds", exitCode: 28
+    )
+    #expect(catTimeout == .timeout)
+
+    let catNet = healer.classifyError(
+      stderr: "curl: (6) Could not resolve host: example.invalid", exitCode: 6
+    )
+    #expect(catNet == .networkError)
+  }
+
   // MARK: - Helpers
 
   private func makeHealer(os: OS) -> CommandHealer {

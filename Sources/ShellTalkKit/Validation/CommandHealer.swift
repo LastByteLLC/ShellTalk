@@ -115,8 +115,16 @@ public struct CommandHealer: Sendable {
       return .syntaxError
     }
 
+    // Timeout distinct from network: "timed out" / "timeout" / "deadline exceeded".
+    // Caught BEFORE networkError to avoid mis-classifying curl's (28) timeout
+    // as a DNS/connection issue.
+    if lower.contains("timed out") || lower.contains("timeout")
+      || lower.contains("deadline exceeded") {
+      return .timeout
+    }
+
     if lower.contains("could not resolve host") || lower.contains("connection refused")
-      || lower.contains("network is unreachable") || lower.contains("timed out") {
+      || lower.contains("network is unreachable") {
       return .networkError
     }
 
@@ -142,10 +150,84 @@ public struct CommandHealer: Sendable {
       )
     }
 
+    // Typo correction: find nearest command by Damerau-Levenshtein distance.
+    // Only suggest if distance <= 2 and the typo is a reasonable length
+    // (short tokens match too many things).
+    if cmdName.count >= 3, let correction = nearestInstalledCommand(to: cmdName) {
+      let healed = original.replacingOccurrences(of: cmdName, with: correction)
+      return HealResult(
+        healed: true, command: healed, category: .commandNotFound,
+        explanation: "'\(cmdName)' not found — did you mean '\(correction)'?"
+      )
+    }
+
     return HealResult(
       healed: false, command: original, category: .commandNotFound,
       explanation: "'\(cmdName)' is not installed. Install it or use an alternative."
     )
+  }
+
+  /// Find the installed command closest to the given typo, if within edit
+  /// distance 2. Tiebreak (in priority order, deterministic):
+  ///   1. smaller edit distance
+  ///   2. commands NOT prefixed with `g` (GNU overrides like `gtr`, `gsed`
+  ///      are aliases for BSD counterparts — real user intent is the
+  ///      un-prefixed form)
+  ///   3. shorter command name (short typos usually target short commands)
+  ///   4. alphabetical order
+  /// The Set iteration order of availableCommands is non-deterministic per
+  /// F1 in FINDINGS.md; the alphabetical tiebreak makes this method stable.
+  private func nearestInstalledCommand(to typo: String) -> String? {
+    let maxDistance = typo.count <= 4 ? 1 : 2
+    struct Candidate {
+      let command: String
+      let distance: Int
+      let isGnuPrefix: Bool   // true for "gsed", "gawk" etc. — deprioritized
+    }
+    var candidates: [Candidate] = []
+    for cmd in profile.availableCommands {
+      if abs(cmd.count - typo.count) > maxDistance { continue }
+      let d = editDistance(typo, cmd)
+      if d > maxDistance { continue }
+      let isGnu = cmd.count >= 4 && cmd.hasPrefix("g")
+        && profile.availableCommands.contains(String(cmd.dropFirst()))
+      candidates.append(Candidate(command: cmd, distance: d, isGnuPrefix: isGnu))
+    }
+    // Sort by the priority tuple; first element wins.
+    candidates.sort { a, b in
+      if a.distance != b.distance { return a.distance < b.distance }
+      if a.isGnuPrefix != b.isGnuPrefix { return !a.isGnuPrefix }
+      if a.command.count != b.command.count { return a.command.count < b.command.count }
+      return a.command < b.command
+    }
+    return candidates.first?.command
+  }
+
+  /// Damerau-Levenshtein distance (handles adjacent transpositions as one
+  /// edit — most common typo pattern). Mirrors the implementation in
+  /// `IntentMatcher.editDistance`.
+  private func editDistance(_ a: String, _ b: String) -> Int {
+    let m = a.count, n = b.count
+    if m == 0 { return n }
+    if n == 0 { return m }
+    let aChars = Array(a)
+    let bChars = Array(b)
+    var d = Array(repeating: Array(repeating: 0, count: n + 1), count: m + 1)
+    for i in 0...m { d[i][0] = i }
+    for j in 0...n { d[0][j] = j }
+    for i in 1...m {
+      for j in 1...n {
+        let cost = aChars[i - 1] == bChars[j - 1] ? 0 : 1
+        d[i][j] = min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost)
+        if i > 1 && j > 1
+          && aChars[i - 1] == bChars[j - 2]
+          && aChars[i - 2] == bChars[j - 1]
+        {
+          d[i][j] = min(d[i][j], d[i - 2][j - 2] + cost)
+        }
+      }
+    }
+    return d[m][n]
   }
 
   private func healBSDGnuMismatch(original: String, stderr: String) -> HealResult {
