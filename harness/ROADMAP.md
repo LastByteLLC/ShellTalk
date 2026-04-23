@@ -49,7 +49,7 @@ and familiarity with the harness loop.
 
 | id | goal | axis | LOC | risk | target suite(s) |
 |---|---|---|---:|---|---|
-| T1.1 | Named-weekday date math (`since Monday`, `2 weeks ago` routing) | C | ~40 | low | WildTimeExpressions → ~0.67 |
+| ~~T1.1~~ | ~~Named-weekday date math (`since Monday`, `2 weeks ago` routing)~~ | C+B | ~70 | low | **Shipped `8aff863`** — WildTime 0.56 → 1.00 |
 | T1.2 | `grep_search` wins on quoted-regex queries | B | ~10 | medium | WildShellMetachars → ~0.67 |
 | T1.3 | `.host` entity for bare domains (formalize) | D-small | ~20 | low | cleanup; no metric move |
 | T1.4 | Healing: common long→short flag corrections | D-small | ~50 | medium | healing coverage; no metric move (CommandHealerTests only) |
