@@ -39,9 +39,9 @@ public enum TemplateRefinements {
         negativeKeywords: ["rename", "diff", "compare"]                  // cand-001, cand-027 + round-c
       ),
       "rm_file": TemplateOverlay(
-        addIntents: [                                                    // E4
-          "remove the old log files",                                     // targeted: was phrase-mapped to find_by_extension
-        ],
+        // E4's "remove the old log files" addIntent migrated to an
+        // authoritativeOverride in TemplateStore (F5) so the fix doesn't
+        // shift BM25 IDF and break adjacent queries like "delete temp.txt".
         discriminators: ["delete", "remove", "trash", "erase", "old"]    // cand-019
       ),
       "find_and_delete": TemplateOverlay(
@@ -198,7 +198,6 @@ public enum TemplateRefinements {
           "who changed AppDelegate.swift",
           "who modified this code",
         ],
-        negativeKeywords: ["info", "content", "size", "type"],           // E3: "file info" / "file content" belong to file_info
         discriminators: ["blame", "who"]
       ),
       // E3: lsof_open_files poaches "open README.md" queries via the common
@@ -212,28 +211,21 @@ public enum TemplateRefinements {
           "doc", "pdf", "csv",
         ]
       ),
-      // E3: history_search matches any query containing weak generic verbs
-      // via BM25. When the user invokes a specific CLI, they do not want
-      // to search shell history.
-      "history_search": TemplateOverlay(
+      // F2: open_with_app ("open X with Y") was poaching "open README.md"
+      // once E3 pushed lsof away. Same remedy — a bare file-name query
+      // without "with" / "using" is NOT an open-with-app query.
+      "open_with_app": TemplateOverlay(
         negativeKeywords: [
-          "docker", "kubectl", "aws", "git", "npm", "yarn", "pnpm",
-          "python", "node", "swift", "cargo", "rustc", "go",
-          "nginx", "postgres", "mysql", "redis",
+          "readme", "config", "package",
+          "md", "txt", "yml", "yaml", "json", "toml", "xml",
+          "doc", "pdf", "csv",
         ]
       ),
-      // E3: for_lines over-matches conversational queries that happen to
-      // contain shell-scripting-adjacent words (e.g., "life" stemming
-      // toward "line" via BM25 tokenization collision, or common fillers).
-      // These are all words that never appear in a legitimate shell-loop
-      // request.
-      "for_lines": TemplateOverlay(
-        negativeKeywords: [
-          "meaning", "life", "love", "hate",
-          "what", "why", "how",
-          "tell", "explain", "describe",
-        ]
-      ),
+      // (E3 for_lines / history_search negativeKeywords removed: the
+      //  typo-correction hallucination guard in IntentMatcher.match
+      //  (F1) handles the conversational-query problem more cleanly
+      //  and at the source. The CLI-name negatives on history_search
+      //  were never measurably engaged.)
       "gzip_file": TemplateOverlay(
         addIntents: [                                                    // round-c sweep
           "compress the file",

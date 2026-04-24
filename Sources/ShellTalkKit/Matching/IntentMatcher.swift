@@ -131,15 +131,57 @@ public final class IntentMatcher: Sendable {
       return result
     }
 
-    // Try typo correction — may produce a better match
+    // Try typo correction — may produce a better match.
+    //
+    // Hallucination guard: if the ORIGINAL query matched nothing at all
+    // (result == nil) AND the query has multiple unrecognized tokens AND
+    // the correction produced only a weak match, it's almost certainly
+    // an off-topic / conversational query that correction "rescued" by
+    // mangling words into anchor words — "what is the meaning of life"
+    // becoming "what is the merging of line" becoming `for_lines` is the
+    // canonical case. Prefer nil over a confident-looking wrong answer.
+    //
+    // The guard intentionally allows:
+    //   • Single-typo queries ("doker ps"): suspectCount == 1 → accept
+    //   • Multi-typo queries with strong corrections ("delet my sourc
+    //     fiels"): the corrected match will land at high confidence
+    //     (≥ 3.5), so we accept it
+    //   • Queries where the original partially matched: result != nil
+    //     means the uncorrected query had *some* signal
     if likelyHasTypos, let corrected = tryTypoCorrection(query, entities: entities) {
-      // Always prefer the corrected match when we detected typos —
-      // the corrected query is inherently more trustworthy than a match
-      // against misspelled tokens.
+      if result == nil,
+         suspectTokenCount(query, entities: entities) >= 2,
+         corrected.confidence < 3.5 {
+        return nil
+      }
       return corrected
     }
 
     return result
+  }
+
+  /// Count content tokens in the query that aren't recognized as anchors,
+  /// known commands, entities, or structured data. Used by the typo-
+  /// correction hallucination guard.
+  private func suspectTokenCount(_ query: String, entities: [RecognizedEntity]) -> Int {
+    let tokens = BM25.tokenize(query)
+    let entityTexts = Set(
+      entities.flatMap { entity -> [String] in
+        entity.text.lowercased()
+          .components(separatedBy: CharacterSet.alphanumerics.inverted)
+          .filter { $0.count >= 2 }
+      }
+    )
+    var count = 0
+    for token in tokens {
+      guard token.count >= 4 else { continue }
+      if anchorWords.contains(token) { continue }
+      if knownCommands.contains(token) { continue }
+      if entityTexts.contains(token) { continue }
+      if looksLikeStructuredToken(token) { continue }
+      count += 1
+    }
+    return count
   }
 
   /// Check whether the query likely contains typos by looking for tokens

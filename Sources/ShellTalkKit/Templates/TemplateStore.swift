@@ -273,6 +273,17 @@ public final class TemplateStore: Sendable {
       "resize image": "magick_resize",       // cross-platform over sips
       "open file with": "open_with_app",     // distinguishes from "open file"
       "watch git": "watch_command",          // vs git_status phrase
+      // F3: "show me what's different" on Linux was hitting `diff_files`
+      // (two arbitrary files) rather than `git_diff` (working tree).
+      // macOS rerank caught this; Linux didn't. Force git_diff here.
+      "what's different": "git_diff",
+      "whats different": "git_diff",
+      // F5: "remove the old log files" (phrase path on Linux) was routing
+      // to find_by_extension. Authoritative override keeps rm_file the
+      // target without adding an intent (intent changes perturb global
+      // BM25 IDF and were regressing "delete temp.txt" on macOS).
+      "old log files": "rm_file",
+      "old log": "rm_file",
     ]
     for (phrase, templateId) in authoritativeOverrides {
       phrases[phrase] = templateId
