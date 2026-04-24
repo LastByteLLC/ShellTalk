@@ -481,7 +481,7 @@ let allCases: [(String, [EvalCase])] = [
     EvalCase("grep -r TODO .", template: "grep_search", category: "text_processing", required: ["grep"], "Terse+flags: grep -r"),
     EvalCase("chmod +x deploy.sh", template: "chmod_executable", category: "file_ops", required: ["chmod", "+x"], "Terse+flags: chmod +x"),
     EvalCase("tar -xzf archive.tar.gz", template: "tar_extract", category: "compression", required: ["tar", "-xzf"], "Terse+flags: tar extract"),
-    EvalCase("find . -name '*.py' -type f", template: "find_by_extension", category: "file_ops", required: ["find"], "Terse+flags: find ext"),
+    EvalCase("find . -name '*.py' -type f", template: "find_by_name", category: "file_ops", required: ["find", "-name", "*.py"], "Terse+flags: find CLI form (T1.8 gold correction — both find_by_name and find_by_extension produce identical output after quote-stripping)"),
     EvalCase("curl -sI https://example.com", template: "curl_headers", category: "network", required: ["curl"], "Terse+flags: curl headers"),
     EvalCase("docker run -it ubuntu bash", template: "docker_run", category: "dev_tools", required: ["docker run"], "Terse+flags: docker run"),
     EvalCase("git log --oneline -n 10", template: "git_log", category: "git", required: ["git log"], "Terse+flags: git log"),

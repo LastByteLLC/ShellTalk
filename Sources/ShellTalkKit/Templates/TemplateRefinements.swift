@@ -181,6 +181,12 @@ public enum TemplateRefinements {
           // regressed "yo list my files bro" (NegativeEdge).
           "list javascript files",
           "list all .ts files",
+          // T1.8 attempt rolled back: addIntents for literal CLI form
+          // "find -name '*.X' -type f" perturbed BM25 enough to steal
+          // NL "find files with HOME in their name" from find_by_name.
+          // Real fix: strip surrounding quotes in .glob/.path sanitize
+          // so find_by_name's broken double-quoted output goes away
+          // (see SlotExtractor.swift sanitize update in T1.8).
         ]
       ),
 
@@ -200,6 +206,18 @@ public enum TemplateRefinements {
         // tokens shouldn't pull queries here.
         negativeKeywords: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
         discriminators: ["compare", "changes"]                           // cand-007 (preserved)
+      ),
+      "file_info": TemplateOverlay(
+        // T1.8: 'find . -name *.py -type f' was routing here because
+        // 'type' + 'file' overlap with 'what type of file' intent.
+        // file_info should never match a CLI find invocation.
+        negativeKeywords: ["find", "-type", "-name", "grep", "ls"]       // T1.8 (2026-04-23-round-b)
+      ),
+      "docker_exec": TemplateOverlay(
+        // T1.8: 'docker run -it ubuntu bash' was routing here via 'bash'
+        // token in 'bash into container' intent. 'run' is the docker_run
+        // anchor — never an exec query.
+        negativeKeywords: ["run", "start", "launch"]                     // T1.8 (2026-04-23-round-b)
       ),
       "git_pull": TemplateOverlay(
         // T1.5 side effect: git_commit_push perturbed BM25 enough that

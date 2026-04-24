@@ -74,8 +74,9 @@ public enum BuiltInTemplates {
         command: "find {PATH} -name '*.{EXT}' -type f",
         slots: [
           "PATH": SlotDefinition(type: .path, defaultValue: "."),
+          // T1.8: added `-name '*.X'` literal form for CLI-style queries.
           "EXT": SlotDefinition(type: .fileExtension,
-            extractPattern: #"(?:find|list|show)\s+(?:all\s+)?\.?(\w+)\s+files|files?\s+(?:with\s+)?\.(\w+)"#),
+            extractPattern: #"(?:find|list|show)\s+(?:all\s+)?\.?(\w+)\s+files|files?\s+(?:with\s+)?\.(\w+)|-name\s+['"]?\*?\.(\w+)['"]?"#),
         ]
       ),
       CommandTemplate(

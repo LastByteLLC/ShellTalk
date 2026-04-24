@@ -50,7 +50,7 @@ public struct SlotExtractor: Sendable {
       // Strategy 3: Type-specific heuristic extraction
       if let value = extractByType(definition.type, from: query, slotName: name),
          !isNoiseValue(value, type: definition.type) {
-        extracted[name] = value
+        extracted[name] = sanitize(value, type: definition.type)         // T1.8: was bypassing sanitize
         continue
       }
 
@@ -321,7 +321,14 @@ public struct SlotExtractor: Sendable {
 
   private func extractPath(from query: String) -> String? {
     let pathPattern = #"(?:^|\s)((?:\.{0,2}/|~/)[^\s]+|[^\s]+\.[a-zA-Z]{1,10})"#
-    return extractByRegex(pattern: pathPattern, from: query)
+    guard let captured = extractByRegex(pattern: pathPattern, from: query) else { return nil }
+    // T1.8: reject glob/wildcard tokens — those are PATTERN values, not
+    // PATH values. Stops `find . -name '*.py' -type f` from binding
+    // PATH=`*.py` (which is a valid but semantically wrong invocation).
+    if captured.hasPrefix("*") || captured.contains("*.") && !captured.contains("/") {
+      return nil
+    }
+    return captured
   }
 
   private func extractGlob(from query: String) -> String? {
@@ -357,6 +364,20 @@ public struct SlotExtractor: Sendable {
 
   private func sanitize(_ value: String, type: SlotType) -> String {
     var cleaned = value.trimmingCharacters(in: .whitespaces)
+
+    // T1.8: strip leading/trailing quotes for path/glob/string slots so
+    // CLI-style queries like `find . -name '*.py' -type f` don't
+    // produce double-quoted output (`-name ''*.py''`). Stripped
+    // independently on each side to handle the regex-cropped case where
+    // the closing quote sits outside the captured boundary.
+    if type == .path || type == .glob || type == .string {
+      while let first = cleaned.first, first == "'" || first == "\"" {
+        cleaned.removeFirst()
+      }
+      while let last = cleaned.last, last == "'" || last == "\"" {
+        cleaned.removeLast()
+      }
+    }
 
     switch type {
     case .path:
