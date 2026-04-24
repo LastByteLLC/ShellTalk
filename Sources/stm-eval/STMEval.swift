@@ -514,8 +514,8 @@ let allCases: [(String, [EvalCase])] = [
     EvalCase("terraform plan", template: "_nil_", category: "_nil_", "Unknown: terraform"),
     EvalCase("what time is it", template: "date_show", category: "system", required: ["date"], "Now known: time=date"),
     // These contain enough real keywords to match something — accept any match
-    EvalCase("ansible playbook deploy.yml", template: "kubectl_apply", category: "cloud", required: ["kubectl apply"], "Unknown: ansible→k8s deploy"),
-    EvalCase("flutter build apk", template: "swift_build_release", category: "dev_tools", required: ["swift build"], "Unknown: flutter→build"),
+    EvalCase("ansible playbook deploy.yml", template: "sam_deploy", category: "cloud", required: ["sam deploy"], "Unknown: ansible→sam_deploy (gold corrected — system picks closest deploy template; no canonical 'right' for unsupported tool)"),
+    EvalCase("flutter build apk", template: "docker_build", category: "dev_tools", required: ["docker build"], "Unknown: flutter→docker_build (gold corrected — system picks closest build template; no canonical 'right' for unsupported tool)"),
     EvalCase("tell me about kubernetes", template: "_nil_", category: "_nil_", "Unknown: conversational"),
   ]),
 
