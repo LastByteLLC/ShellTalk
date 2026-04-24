@@ -122,9 +122,17 @@ jobs:
       - name: Build (release)
         # `--product` with multiple values only builds the last one;
         # run two invocations so both binaries land in .build/release/.
+        # -Osize + -gnone trims ~15-25% off the binary before stripping;
+        # strip --strip-all drops symbol/debug data that `-gnone` can't touch.
         run: |
-          swift build -c release --product shelltalk
-          swift build -c release --product stm-eval
+          swift build -c release --product shelltalk \
+            -Xswiftc -Osize -Xswiftc -gnone -Xlinker -s
+          swift build -c release --product stm-eval \
+            -Xswiftc -Osize -Xswiftc -gnone -Xlinker -s
+          strip --strip-all .build/release/shelltalk
+          strip --strip-all .build/release/stm-eval
+          echo "Binary sizes after strip:"
+          ls -lh .build/release/shelltalk .build/release/stm-eval
 
       - name: Smoke test
         run: |
@@ -203,14 +211,38 @@ jobs:
         run: swift sdk list
 
       - name: Build WASM binary
-        run: swift build --swift-sdk wasm32-unknown-wasip1 --product shelltalk-wasm -c release -Xswiftc -Osize
+        # Size-focused flags: -Osize picks the size-optimizing pipeline; -gnone
+        # drops debug info (normally implied by -c release but explicit is safer);
+        # -disable-reflection-metadata and -disable-availability-checking via
+        # -Xfrontend shave reflection strings and OS-version scaffolding that
+        # WASI never uses. See docs/bench.md for measured impact.
+        run: |
+          swift build --swift-sdk wasm32-unknown-wasip1 --product shelltalk-wasm -c release \
+            -Xswiftc -Osize \
+            -Xswiftc -gnone \
+            -Xswiftc -Xfrontend -Xswiftc -disable-reflection-metadata \
+            -Xswiftc -Xfrontend -Xswiftc -disable-availability-checking
 
       - name: Optimize WASM binary
         run: |
-          sudo apt-get install -y -qq binaryen
-          wasm-opt -Oz --strip-debug --strip-producers \
+          sudo apt-get install -y -qq binaryen wabt brotli
+          wasm-opt -Oz \
+            --strip-debug --strip-producers --strip-eh --strip-target-features \
+            --vacuum --dae-optimizing --converge \
             .build/wasm32-unknown-wasip1/release/shelltalk-wasm.wasm \
             -o Web/shelltalk.wasm
+          wasm-strip Web/shelltalk.wasm || true
+
+      - name: Emit compressed wire variants
+        # Precompute .br and .gz next to .wasm so the web demo (shelltalk.js)
+        # can fetch the smaller variant directly — DecompressionStream handles
+        # the decode in-browser, no server Content-Encoding cooperation needed.
+        # Brotli at quality 11 typically hits ~26% of raw for Swift WASM; gzip
+        # at -9 hits ~40%.
+        run: |
+          brotli --force -q 11 -o Web/shelltalk.wasm.br Web/shelltalk.wasm
+          gzip  --force -9  -k  Web/shelltalk.wasm
+          ls -lh Web/shelltalk.wasm Web/shelltalk.wasm.br Web/shelltalk.wasm.gz
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
@@ -222,7 +254,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: shelltalk-wasm
-          path: Web/shelltalk.wasm
+          path: |
+            Web/shelltalk.wasm
+            Web/shelltalk.wasm.br
+            Web/shelltalk.wasm.gz
           if-no-files-found: error
           retention-days: 7
 

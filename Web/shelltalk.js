@@ -4,6 +4,8 @@
 // or a minimal stdin/stdout bridge to communicate with the WASM binary.
 
 const WASM_PATH = 'shelltalk.wasm';
+const WASM_GZ_PATH = 'shelltalk.wasm.gz';
+const WASM_BR_PATH = 'shelltalk.wasm.br';
 
 let wasmInstance = null;
 let wasmReady = false;
@@ -322,16 +324,54 @@ async function runQuery(query) {
   }
 }
 
+// Prefer compressed variants if available. The raw WASM binary is ~44 MB;
+// brotli cuts it to ~12 MB, gzip to ~17 MB. DecompressionStream supports
+// gzip in all modern browsers; brotli support landed in Chrome 117+ / Safari
+// 17+ so we prefer brotli when the browser advertises support, else gzip,
+// else raw. The server never needs to set Content-Encoding — we decompress
+// client-side.
+async function fetchWasmBytes() {
+  const tryFetch = async (url, encoding) => {
+    try {
+      const resp = await fetch(url);
+      if (!resp.ok) return null;
+      if (!encoding) return await resp.arrayBuffer();
+      loadingEl.textContent = `Decompressing (${encoding})...`;
+      const stream = resp.body.pipeThrough(new DecompressionStream(encoding));
+      return await new Response(stream).arrayBuffer();
+    } catch {
+      return null;
+    }
+  };
+
+  const supportsBrotli =
+    typeof DecompressionStream !== 'undefined' &&
+    (() => { try { new DecompressionStream('br'); return true; } catch { return false; } })();
+
+  if (supportsBrotli) {
+    loadingEl.textContent = 'Downloading (brotli, ~12 MB)...';
+    const bytes = await tryFetch(WASM_BR_PATH, 'br');
+    if (bytes) return bytes;
+  }
+  if (typeof DecompressionStream !== 'undefined') {
+    loadingEl.textContent = 'Downloading (gzip, ~17 MB)...';
+    const bytes = await tryFetch(WASM_GZ_PATH, 'gzip');
+    if (bytes) return bytes;
+  }
+  loadingEl.textContent = 'Downloading (~44 MB) — no compression available...';
+  const bytes = await tryFetch(WASM_PATH, null);
+  if (!bytes) throw new Error(`Failed to load ${WASM_PATH}`);
+  return bytes;
+}
+
 // Initialize
 async function init() {
   try {
     loadingEl.textContent = 'Downloading ShellTalk WASM module...';
 
-    const response = await fetch(WASM_PATH);
-    if (!response.ok) throw new Error(`Failed to load ${WASM_PATH}: ${response.status}`);
+    const bytes = await fetchWasmBytes();
 
     loadingEl.textContent = 'Compiling WebAssembly...';
-    const bytes = await response.arrayBuffer();
     wasmModule = await WebAssembly.compile(bytes);
 
     wasiImports = createWASI();
