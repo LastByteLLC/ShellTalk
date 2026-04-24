@@ -218,7 +218,7 @@ public enum BuiltInTemplates {
           "FLAGS": SlotDefinition(type: .commandFlag, defaultValue: "",
             extractPattern: #"\s(-[a-zA-Z]+|--[a-z]+)\b"#),
           "SOURCE": SlotDefinition(type: .path,
-            extractPattern: #"copy\s+(\S+\.\S+)|\b(\S+\.\S+)\s+(?:and|,)\s+\S+\.\S+|(?:and|,)\s+(\S+\.\S+)"#,
+            extractPattern: #"(?:copy|cp)\s+(\S+\.\S+)|\b(\S+\.\S+)\s+(?:and|,)\s+\S+\.\S+|(?:and|,)\s+(\S+\.\S+)"#,
             multi: true),
           "DEST": SlotDefinition(type: .path, extractPattern: #"(?:to|into)\s+(\S+)"#),
         ]
@@ -233,9 +233,12 @@ public enum BuiltInTemplates {
         ],
         command: "mv {SOURCE} {DEST}",
         slots: [
-          // T2.1: same multi-source pattern as cp_file.
+          // T2.1: same multi-source pattern as cp_file. D.5: added 'mv' to
+          // the verb alternation (was matching only 'move'/'rename'; bare
+          // 'mv FILE to DEST' fell through to entity matching which bound
+          // DEST as SOURCE).
           "SOURCE": SlotDefinition(type: .path,
-            extractPattern: #"(?:move|rename)\s+(\S+\.\S+)|\b(\S+\.\S+)\s+(?:and|,)\s+\S+\.\S+|(?:and|,)\s+(\S+\.\S+)"#,
+            extractPattern: #"(?:move|rename|mv)\s+(\S+\.\S+)|\b(\S+\.\S+)\s+(?:and|,)\s+\S+\.\S+|(?:and|,)\s+(\S+\.\S+)"#,
             multi: true),
           "DEST": SlotDefinition(type: .path, extractPattern: #"(?:to|into|as)\s+(\S+)"#),
         ]
