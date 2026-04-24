@@ -191,10 +191,10 @@ Current shipped frontier (see `harness/frontier.md` for the full timeline):
 
 | state            | n   | tpl_acc | cat_acc | BM25 lane | p95_ms |
 | ---------------- | ---:| ------: | ------: | --------: | -----: |
-| shipped (main)   | 454 |  0.9736 |  0.9890 |     0.908 |    359 |
+| shipped (main)   | 454 |  0.9780 |  0.9890 |     0.925 |    358 |
 | original baseline | 380 |  0.8947 |  0.9421 |     0.687 |   1038 |
 
-Net across all rounds: **+7.89pp tpl_acc**, **+4.69pp cat_acc**, **+22.1pp** on the BM25 ranking lane. Eval set grew 380 → 454 cases (+74 from audit additions). Determinism restored (F1 in `harness/FINDINGS.md`). `harness/runs/` is gitignored — only the shipped state lives in source and `frontier.md` / `ROADMAP.md`.
+Net across all rounds: **+8.33pp tpl_acc**, **+4.69pp cat_acc**, **+23.8pp** on the BM25 ranking lane, **65% lower p95**. Eval set grew 380 → 454 cases (+74 from audit additions). 28 of 35 suites at 100%. Determinism restored (F1 in `harness/FINDINGS.md`). `harness/runs/` is gitignored — only the shipped state lives in source and `frontier.md` / `ROADMAP.md`.
 
 ```bash
 # Evaluate an overlay candidate
