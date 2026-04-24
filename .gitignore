@@ -12,3 +12,4 @@ DerivedData/
 # Meta-harness run artifacts (overlays, per-candidate traces, metrics, notes).
 # Local-only — only condensed findings at harness/*.md are tracked.
 harness/runs/
+*.lock
