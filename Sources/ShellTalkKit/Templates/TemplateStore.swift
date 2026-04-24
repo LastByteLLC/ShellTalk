@@ -226,8 +226,12 @@ public final class TemplateStore: Sendable {
       // SSL
       "ssl certificate": "openssl_check",
       "ssl cert": "openssl_check",
-      // Version checking
-      "version of": "command_help",
+      // Version checking — "version of node" means `node --version`, not
+      // `node --help`. Prior mapping to command_help was semantically
+      // wrong; macOS's BM25 rerank was papering over it by overriding
+      // the phrase pick with command_version, but the F1 Linux phrase-
+      // override threshold (8.0) exposed the bug.
+      "version of": "command_version",
       // Brew
       "brew packages": "brew_update",
       "update packages": "brew_update",
