@@ -51,9 +51,18 @@ public struct CommandHealer: Sendable {
     case .fileNotFound:
       return healFileNotFound(original: original, stderr: result.stderr)
     case .permissionDenied:
+      // round-c: more actionable hint — extract the path that failed
+      // (when stderr names it) and suggest the chmod / chown command.
+      let pathHint = extractPathFromPermissionError(result.stderr)
+      let suggestion: String
+      if let p = pathHint {
+        suggestion = "Try: ls -la '\(p)' to inspect ownership; sudo chmod / sudo chown if you have authority. (will not add sudo automatically)"
+      } else {
+        suggestion = "Check file ownership and permissions (will not add sudo)."
+      }
       return HealResult(
         healed: false, command: original, category: category,
-        explanation: "Permission denied. Check file ownership and permissions (will not add sudo)."
+        explanation: "Permission denied. \(suggestion)"
       )
     case .syntaxError:
       return healSyntaxError(original: original, stderr: result.stderr)
@@ -68,6 +77,22 @@ public struct CommandHealer: Sendable {
         explanation: "Command timed out. Consider adding a timeout flag or reducing scope."
       )
     case .other:
+      // round-c: empty-stderr case (silent failure). Surface exit code
+      // and a suggestion to re-run with verbose output. Treats exit 1
+      // as likely-expected-failure (e.g., grep no-match) vs > 1 as
+      // an actual error needing investigation.
+      if result.stderr.isEmpty {
+        if result.exitCode == 1 {
+          return HealResult(
+            healed: false, command: original, category: category,
+            explanation: "Exit code 1 with no stderr — likely expected (e.g., grep no-match, test false). Not an error."
+          )
+        }
+        return HealResult(
+          healed: false, command: original, category: category,
+          explanation: "Exit code \(result.exitCode) with no stderr. Re-run with -v / --verbose for diagnostics, or check the command's --help."
+        )
+      }
       return HealResult(
         healed: false, command: original, category: category,
         explanation: "Unrecognized error: \(result.stderr.prefix(200))"
@@ -201,6 +226,27 @@ public struct CommandHealer: Sendable {
       return a.command < b.command
     }
     return candidates.first?.command
+  }
+
+  /// round-c: extract the offending path from a "Permission denied"
+  /// stderr line. Common forms:
+  ///   "cat: /etc/shadow: Permission denied"
+  ///   "bash: /etc/shadow: Permission denied"
+  ///   "/etc/shadow: Permission denied"
+  private func extractPathFromPermissionError(_ stderr: String) -> String? {
+    let patterns = [
+      #"[a-zA-Z]+:\s+(\S+):\s+Permission denied"#,
+      #"^(\S+):\s+Permission denied"#,
+    ]
+    for pattern in patterns {
+      if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+         let m = regex.firstMatch(in: stderr, range: NSRange(stderr.startIndex..., in: stderr)),
+         m.numberOfRanges > 1,
+         let r = Range(m.range(at: 1), in: stderr) {
+        return String(stderr[r])
+      }
+    }
+    return nil
   }
 
   /// Damerau-Levenshtein distance (handles adjacent transpositions as one

@@ -227,6 +227,43 @@ struct CommandHealerTests {
     #expect(!r.command.contains("--gibberish"))
   }
 
+  // MARK: - Empty stderr + permission diag (round-c)
+
+  @Test("Empty stderr exit-code 1 → 'likely expected' diagnosis")
+  func emptyStderrExitOne() {
+    let healer = makeHealer(os: .macOS)
+    let r = healer.heal(
+      original: "grep nonexistent file.txt",
+      result: ShellResult(stdout: "", stderr: "", exitCode: 1)
+    )
+    #expect(!r.healed)
+    #expect(r.explanation.contains("likely expected"))
+  }
+
+  @Test("Empty stderr exit > 1 → exit-code surface + verbose hint")
+  func emptyStderrExitOther() {
+    let healer = makeHealer(os: .macOS)
+    let r = healer.heal(
+      original: "some-cmd",
+      result: ShellResult(stdout: "", stderr: "", exitCode: 13)
+    )
+    #expect(!r.healed)
+    #expect(r.explanation.contains("Exit code 13"))
+    #expect(r.explanation.contains("verbose"))
+  }
+
+  @Test("Permission denied surfaces failing path")
+  func permDeniedPathExtraction() {
+    let healer = makeHealer(os: .macOS)
+    let r = healer.heal(
+      original: "cat /etc/shadow",
+      result: ShellResult(stdout: "", stderr: "cat: /etc/shadow: Permission denied", exitCode: 1)
+    )
+    #expect(!r.healed)
+    #expect(r.explanation.contains("/etc/shadow"))
+    #expect(r.explanation.contains("ls -la"))
+  }
+
   // MARK: - Helpers
 
   private func makeHealer(os: OS) -> CommandHealer {
