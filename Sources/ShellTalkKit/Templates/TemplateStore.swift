@@ -30,6 +30,15 @@ public final class TemplateStore: Sendable {
   /// Used when the first word of the query is a known shell command.
   public let commandPrefixIndex: [String: [String]]
 
+  /// Lowercase-normalized negative keywords per template id.
+  /// Built once at init; IntentMatcher consults this instead of calling
+  /// `.lowercased()` on each keyword per-query.
+  public let negativeKeywordsLower: [String: Set<String>]
+
+  /// Lowercase-normalized discriminators per template id.
+  /// Same rationale as `negativeKeywordsLower`.
+  public let discriminatorsLower: [String: Set<String>]
+
   public init(categories: [TemplateCategory]) {
     self.categories = categories
 
@@ -51,14 +60,24 @@ public final class TemplateStore: Sendable {
     }
     self.templateIndexes = indexes
 
-    // Build flat lookup map
+    // Build flat lookup map + normalized keyword side-indexes
     var map: [String: (String, CommandTemplate)] = [:]
+    var negLower: [String: Set<String>] = [:]
+    var discLower: [String: Set<String>] = [:]
     for cat in categories {
       for template in cat.templates {
         map[template.id] = (cat.id, template)
+        if let negatives = template.negativeKeywords, !negatives.isEmpty {
+          negLower[template.id] = Set(negatives.map { $0.lowercased() })
+        }
+        if let discriminators = template.discriminators, !discriminators.isEmpty {
+          discLower[template.id] = Set(discriminators.map { $0.lowercased() })
+        }
       }
     }
     self.templateMap = map
+    self.negativeKeywordsLower = negLower
+    self.discriminatorsLower = discLower
 
     // Build exact match index
     var exact: [String: String] = [:]

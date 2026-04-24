@@ -720,9 +720,13 @@ struct Metrics: Encodable {
   let substr_acc: Double
   let slot_acc: Double
   let neg_acc: Double
+  let mean_ms: Double
   let p50_ms: Double
+  let p90_ms: Double
   let p95_ms: Double
   let p99_ms: Double
+  let max_ms: Double
+  let wall_ms: Double
   let init_ms: Double
   let per_suite: [String: Double]
   let per_path: [String: PathBucket]
@@ -800,6 +804,7 @@ struct STMEval {
     var pathCounts: [String: (n: Int, ok: Int)] = [:]
     var traces: [TraceRecord] = []
     let wantTraces = args.traceOut != nil
+    let wallStart = Date().timeIntervalSinceReferenceDate
 
     for (suite, cases) in allCases {
       var st = 0, stOk = 0, scOk = 0
@@ -961,6 +966,8 @@ struct STMEval {
       let perPath = pathCounts.mapValues { b -> PathBucket in
         PathBucket(n: b.n, acc: b.n > 0 ? Double(b.ok) / Double(b.n) : 0)
       }
+      let wallMs = (Date().timeIntervalSinceReferenceDate - wallStart) * 1000
+      let mean = sorted.isEmpty ? 0 : sorted.reduce(0, +) / Double(sorted.count)
       let metrics = Metrics(
         n_cases: totalTests,
         tpl_acc: Double(templateOk) / Double(totalTests),
@@ -968,9 +975,13 @@ struct STMEval {
         substr_acc: substrTotal > 0 ? Double(substrOk) / Double(substrTotal) : 1.0,
         slot_acc: slotTotal > 0 ? Double(slotOk) / Double(slotTotal) : 1.0,
         neg_acc: negTotal > 0 ? Double(negOk) / Double(negTotal) : 1.0,
+        mean_ms: mean,
         p50_ms: percentile(sorted, 0.50),
+        p90_ms: percentile(sorted, 0.90),
         p95_ms: percentile(sorted, 0.95),
         p99_ms: percentile(sorted, 0.99),
+        max_ms: sorted.last ?? 0,
+        wall_ms: wallMs,
         init_ms: pipe.initMs,
         per_suite: perSuite,
         per_path: perPath,

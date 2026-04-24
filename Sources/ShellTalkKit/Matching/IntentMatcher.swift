@@ -21,13 +21,36 @@ public struct MatcherConfig: Sendable {
   public let topTemplates: Int
   /// Whether to use NLEmbedding reranking (macOS only).
   public let useEmbeddings: Bool
+  /// Pre-embed all template intents at `IntentMatcher` init.
+  /// Shifts the ~300 ms one-time embed cost out of the first-query path
+  /// into init. Default `false` to preserve the CLI fast-path zero-cost
+  /// startup. Set to `true` for servers or batch workloads where
+  /// consistent low-tail query latency matters more than init time.
+  public let preEmbedIntents: Bool
+
+  public init(
+    categoryThreshold: Double,
+    templateThreshold: Double,
+    topCategories: Int,
+    topTemplates: Int,
+    useEmbeddings: Bool,
+    preEmbedIntents: Bool = false
+  ) {
+    self.categoryThreshold = categoryThreshold
+    self.templateThreshold = templateThreshold
+    self.topCategories = topCategories
+    self.topTemplates = topTemplates
+    self.useEmbeddings = useEmbeddings
+    self.preEmbedIntents = preEmbedIntents
+  }
 
   public static let `default` = MatcherConfig(
     categoryThreshold: 0.5,
     templateThreshold: 0.3,
     topCategories: 3,
     topTemplates: 5,
-    useEmbeddings: true
+    useEmbeddings: true,
+    preEmbedIntents: false
   )
 }
 
@@ -77,6 +100,21 @@ public final class IntentMatcher: Sendable {
     self.anchorWords = anchors
     self.anchorWordsSorted = anchors.sorted()
     self.knownCommands = Set(store.commandPrefixIndex.keys)
+
+    // A1: Opt-in pre-embed. When enabled, populate the process-wide
+    // intent-embedding cache synchronously so BM25-rerank queries never
+    // pay a first-occurrence cache miss. Trade: ~300 ms init for smoother
+    // tail latency. Gated by useEmbeddings so we don't force NL load
+    // when reranking is disabled.
+    if config.preEmbedIntents && config.useEmbeddings {
+      for cat in store.categories {
+        for template in cat.templates {
+          for intent in template.intents {
+            _ = cachedIntentEmbedding(intent)
+          }
+        }
+      }
+    }
   }
 
   /// Match a user query to the best command template.
@@ -419,11 +457,10 @@ public final class IntentMatcher: Sendable {
         let cmdPrefix = TemplateStore.extractCommandPrefix(template.command)
         let cmdFirstToken = cmdPrefix.lowercased().split(separator: " ").first.map(String.init)
         if cmdFirstToken == firstToken {
-          // Check negative keywords before short-circuiting
-          if let negatives = template.negativeKeywords {
+          // Check negative keywords before short-circuiting (pre-normalized)
+          if let negatives = store.negativeKeywordsLower[candidateId] {
             let queryWords = Set(words)
-            let hasNegative = negatives.contains { queryWords.contains($0.lowercased()) }
-            if hasNegative {
+            if !negatives.isDisjoint(with: queryWords) {
               // Negative keyword present — fall through to BM25
               continue
             }
@@ -482,11 +519,9 @@ public final class IntentMatcher: Sendable {
       for candidateId in candidateIds {
         guard let (_, template) = lookupTemplate(candidateId) else { continue }
 
-        if let discriminators = template.discriminators {
-          let hasDiscriminator = discriminators.contains { disc in
-            queryTokensLower.contains(disc.lowercased()) ||
-            normalized.contains(disc.lowercased())
-          }
+        if let discriminators = store.discriminatorsLower[candidateId] {
+          let hasDiscriminator = !discriminators.isDisjoint(with: queryTokensLower)
+            || discriminators.contains(where: { normalized.contains($0) })
           if hasDiscriminator && discriminatorMatch == nil {
             discriminatorMatch = (candidateId, template)
           }
@@ -607,7 +642,7 @@ public final class IntentMatcher: Sendable {
     candidates = applyNegativeKeywordPenalties(candidates: candidates, query: query)
 
     // Optional: Rerank BM25 candidates with embeddings (lazy — only embed candidates)
-    if embedding.isAvailable, config.useEmbeddings, let queryVec = embedding.embed(query) {
+    if config.useEmbeddings, let queryVec = cachedQueryEmbedding(query) {
       candidates = rerankWithEmbeddings(candidates: candidates, queryVector: queryVec)
     }
 
@@ -664,14 +699,12 @@ public final class IntentMatcher: Sendable {
     let queryTokens = Set(BM25.tokenize(query))
 
     return candidates.map { candidate in
-      guard let template = store.template(byId: candidate.template.documentId),
-            let negatives = template.negativeKeywords else { return candidate }
+      guard let negatives = store.negativeKeywordsLower[candidate.template.documentId]
+      else { return candidate }
 
       var penalty = 1.0
-      for neg in negatives {
-        if queryTokens.contains(neg.lowercased()) {
-          penalty *= 0.3
-        }
+      for neg in negatives where queryTokens.contains(neg) {
+        penalty *= 0.3
       }
       guard penalty < 1.0 else { return candidate }
 
@@ -780,7 +813,7 @@ public final class IntentMatcher: Sendable {
       }
     }
 
-    if embedding.isAvailable, config.useEmbeddings, let queryVec = embedding.embed(query) {
+    if config.useEmbeddings, let queryVec = cachedQueryEmbedding(query) {
       candidates = rerankWithEmbeddings(candidates: candidates, queryVector: queryVec)
     }
 
@@ -818,6 +851,16 @@ public final class IntentMatcher: Sendable {
     return c
   }()
 
+  /// Bounded LRU cache for query-string embeddings. Queries are unbounded
+  /// (unlike template intents), so we cap the cache size. Hits save ~1–5 ms
+  /// per repeat query; important for workloads with duplicate or
+  /// fingerprint-able traffic (stm-eval, interactive sessions, servers).
+  nonisolated(unsafe) private static let queryEmbeddingCache: NSCache<NSString, EmbeddingBox> = {
+    let c = NSCache<NSString, EmbeddingBox>()
+    c.countLimit = 1024
+    return c
+  }()
+
   /// Look up an embedding for a template intent phrase, computing and
   /// caching on miss.
   private func cachedIntentEmbedding(_ text: String) -> [Float]? {
@@ -827,6 +870,17 @@ public final class IntentMatcher: Sendable {
     }
     guard let vec = embedding.embed(text) else { return nil }
     Self.intentEmbeddingCache.setObject(EmbeddingBox(vec), forKey: key)
+    return vec
+  }
+
+  /// Look up an embedding for a user query, computing and caching on miss.
+  private func cachedQueryEmbedding(_ text: String) -> [Float]? {
+    let key = text as NSString
+    if let hit = Self.queryEmbeddingCache.object(forKey: key) {
+      return hit.vector
+    }
+    guard let vec = embedding.embed(text) else { return nil }
+    Self.queryEmbeddingCache.setObject(EmbeddingBox(vec), forKey: key)
     return vec
   }
 
