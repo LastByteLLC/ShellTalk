@@ -577,8 +577,8 @@ let allCases: [(String, [EvalCase])] = [
 
   ("WildMultiSource", [
     EvalCase("diff config.old and config.new", template: "diff_files", category: "file_ops", required: ["diff"], "Multi: two file args"),
-    EvalCase("copy README.md and LICENSE to archive/", template: "cp_file", category: "file_ops", required: ["cp"], "Multi: two sources"),
-    EvalCase("move a.txt and b.txt to backup/", template: "mv_file", category: "file_ops", required: ["mv"], "Multi: two sources mv"),
+    EvalCase("copy README.md and CHANGELOG.md to archive/", template: "cp_file", category: "file_ops", required: ["cp", "README.md", "CHANGELOG.md"], "Multi: two sources both binding (T2.1)"),
+    EvalCase("move a.txt and b.txt to backup/", template: "mv_file", category: "file_ops", required: ["mv", "a.txt", "b.txt"], "Multi: two sources mv (T2.1)"),
     EvalCase("compare old.config to new.config", template: "diff_files", category: "file_ops", required: ["diff"], "Multi: compare X to Y"),
     EvalCase("grep foo and bar in logs", template: "grep_search", category: "text_processing", required: ["grep"], "Multi: two patterns grep"),
   ]),

@@ -31,11 +31,24 @@ public struct SlotExtractor: Sendable {
 
     for (name, definition) in slots {
       // Strategy 1: Regex extraction pattern (most precise, template-author-designed)
-      if let pattern = definition.extractPattern,
-         let value = extractByRegex(pattern: pattern, from: query),
-         !isNoiseValue(value, type: definition.type) {
-        extracted[name] = sanitize(value, type: definition.type)
-        continue
+      // T2.1: when multi=true, collect all matches and join with space.
+      if let pattern = definition.extractPattern {
+        let value: String?
+        if definition.multi {
+          value = extractAllMatches(pattern: pattern, from: query)
+        } else {
+          value = extractByRegex(pattern: pattern, from: query)
+        }
+        if let v = value, !isNoiseValue(v, type: definition.type) {
+          // Sanitize each token independently for multi (preserves quote-strip per item).
+          if definition.multi {
+            let parts = v.split(separator: " ").map { sanitize(String($0), type: definition.type) }
+            extracted[name] = parts.joined(separator: " ")
+          } else {
+            extracted[name] = sanitize(v, type: definition.type)
+          }
+          continue
+        }
       }
 
       // Strategy 2: Entity-based matching (fills gaps regex can't cover)
@@ -246,6 +259,33 @@ public struct SlotExtractor: Sendable {
     return nil
   }
 
+  /// T2.1: Collect ALL matches' first non-nil capture group, joined with
+  /// space. For `(\S+)\s+(?:and|,)\s+(\S+)` against "a.txt and b.txt"
+  /// this returns "a.txt b.txt". Used for multi-source slots like cp/mv
+  /// when SlotDefinition.multi is true.
+  private func extractAllMatches(pattern: String, from text: String) -> String? {
+    guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+      return nil
+    }
+    let range = NSRange(text.startIndex..., in: text)
+    let matches = regex.matches(in: text, range: range)
+    guard !matches.isEmpty else { return nil }
+
+    var values: [String] = []
+    for match in matches {
+      for i in 1..<match.numberOfRanges {
+        if let captureRange = Range(match.range(at: i), in: text) {
+          let value = String(text[captureRange])
+          if !value.isEmpty {
+            values.append(value)
+            break  // first non-nil group per match
+          }
+        }
+      }
+    }
+    return values.isEmpty ? nil : values.joined(separator: " ")
+  }
+
   // MARK: - Type-Specific Extraction
 
   private func extractByType(_ type: SlotType, from query: String, slotName: String) -> String? {
@@ -262,7 +302,7 @@ public struct SlotExtractor: Sendable {
       return extractURL(from: query)
     case .branch:
       return extractBranch(from: query)
-    case .pattern, .string, .command, .fileExtension, .fileSize, .relativeDays:
+    case .pattern, .string, .command, .fileExtension, .fileSize, .relativeDays, .commandFlag:
       return nil
     }
   }
@@ -413,6 +453,7 @@ public struct SlotExtractor: Sendable {
     .string: [.string, .applicationName, .processName, .commandName, .packageName, .fileName],
     .command: [.commandName],
     .fileExtension: [.string],
+    .commandFlag: [],   // T2.1: deliberately empty — only regex extraction allowed
   ]
 
   /// Common slot name → preferred entity role.

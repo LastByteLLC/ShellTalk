@@ -207,10 +207,19 @@ public enum BuiltInTemplates {
           "backup file", "create backup", "back up file",
           "save a copy of", "backup my config",
         ],
+        // T2.1: SOURCE may be multiple files joined with " and "/", ".
+        // SlotDefinition.multi+regex captures each capture group as a
+        // separate match and joins with space. cp accepts `cp a b dst/`.
         command: "cp {FLAGS} {SOURCE} {DEST}",
         slots: [
-          "FLAGS": SlotDefinition(type: .string, defaultValue: ""),
-          "SOURCE": SlotDefinition(type: .path, extractPattern: #"copy\s+(\S+)"#),
+          // T2.1: .commandFlag type with empty entity-fallback prevents
+          // a filename from binding to FLAGS (was emitting
+          // `cp main.swift main.swift dst/`).
+          "FLAGS": SlotDefinition(type: .commandFlag, defaultValue: "",
+            extractPattern: #"\s(-[a-zA-Z]+|--[a-z]+)\b"#),
+          "SOURCE": SlotDefinition(type: .path,
+            extractPattern: #"copy\s+(\S+\.\S+)|\b(\S+\.\S+)\s+(?:and|,)\s+\S+\.\S+|(?:and|,)\s+(\S+\.\S+)"#,
+            multi: true),
           "DEST": SlotDefinition(type: .path, extractPattern: #"(?:to|into)\s+(\S+)"#),
         ]
       ),
@@ -224,7 +233,10 @@ public enum BuiltInTemplates {
         ],
         command: "mv {SOURCE} {DEST}",
         slots: [
-          "SOURCE": SlotDefinition(type: .path, extractPattern: #"(?:move|rename)\s+(\S+)"#),
+          // T2.1: same multi-source pattern as cp_file.
+          "SOURCE": SlotDefinition(type: .path,
+            extractPattern: #"(?:move|rename)\s+(\S+\.\S+)|\b(\S+\.\S+)\s+(?:and|,)\s+\S+\.\S+|(?:and|,)\s+(\S+\.\S+)"#,
+            multi: true),
           "DEST": SlotDefinition(type: .path, extractPattern: #"(?:to|into|as)\s+(\S+)"#),
         ]
       ),

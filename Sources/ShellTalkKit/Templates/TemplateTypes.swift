@@ -65,17 +65,23 @@ public struct SlotDefinition: Sendable, Codable {
   public let defaultValue: String?
   public let extractPattern: String?
   public let description: String?
+  /// T2.1: when true, regex extraction collects ALL matches and joins
+  /// them with a space. Used for `{SOURCES}`-style multi-arg patterns
+  /// like `cp a.txt and b.txt to dst/` → SOURCES="a.txt b.txt".
+  public let multi: Bool
 
   public init(
     type: SlotType,
     defaultValue: String? = nil,
     extractPattern: String? = nil,
-    description: String? = nil
+    description: String? = nil,
+    multi: Bool = false
   ) {
     self.type = type
     self.defaultValue = defaultValue
     self.extractPattern = extractPattern
     self.description = description
+    self.multi = multi
   }
 
   enum CodingKeys: String, CodingKey {
@@ -83,6 +89,7 @@ public struct SlotDefinition: Sendable, Codable {
     case defaultValue = "default"
     case extractPattern = "extract"
     case description
+    case multi
   }
 }
 
@@ -100,6 +107,7 @@ public enum SlotType: String, Sendable, Codable {
   case fileExtension // File extension, canonicalized (markdown→md, javascript→js)
   case fileSize     // Byte size with optional unit: "100M", "1G", "512K"
   case relativeDays // Day count converted from unit words: "week"→"7", "month"→"30"
+  case commandFlag  // Shell flag like -r, --recursive — never bind a filename here
 }
 
 /// An optional flag that can be appended to a command.
