@@ -558,17 +558,17 @@ public enum BuiltInTemplates {
         // 'commits between yesterday and today', 'commits from monday to friday'.
         id: "git_log_date_range",
         intents: [
-          // round-c wild-cleanup: stronger intent set for the
-          // 'commits between X and Y' pattern (was losing to git_log_since
-          // on yesterday/today via 'commits since yesterday' intent overlap).
+          // D.2: ALL intents start with "commits between" — anchors the
+          // template-specific phrase. Phrase-match index should boost
+          // these above git_log_since for the "between" form.
           "commits between two dates",
           "commits between yesterday and today",
-          "commits between yesterday today",
+          "commits between today and yesterday",
           "commits between monday and friday",
           "commits between today and tomorrow",
-          "git log between dates",
-          "log commits in date range",
-          "commits in range from date to date",
+          "commits between two days",
+          "commits between dates",
+          "commits between iso dates",
         ],
         command: "git log --oneline --since='{START}' --until='{END}'",
         slots: [
@@ -577,7 +577,8 @@ public enum BuiltInTemplates {
           "END": SlotDefinition(type: .string, defaultValue: "today",
             extractPattern: #"(?:and|to)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday|yesterday|today|\d{4}-\d{2}-\d{2})\s*$"#),
         ],
-        negativeKeywords: ["v1", "v2", "v3", "tag", "release", "ref", "most", "recent", "latest"]
+        negativeKeywords: ["v1", "v2", "v3", "tag", "release", "ref", "most", "recent", "latest"],
+        discriminators: ["between"]                                       // D.2 — phrase anchor
       ),
       CommandTemplate(
         id: "git_log_no_merges",

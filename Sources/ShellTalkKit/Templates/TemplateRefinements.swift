@@ -208,9 +208,11 @@ public enum TemplateRefinements {
         negativeKeywords: ["the file", "single"]                         // round-c — push back from generic compress
       ),
       "tail_follow": TemplateOverlay(
-        // T1.2: 'grep ... in log.txt' was hijacked by tail_follow via
-        // 'log' / 'log.txt' overlap. Grep is never tail.
-        negativeKeywords: ["grep", "error|warning", "search"]            // T1.2
+        // D.1 attempt rolled back: tail_file addIntents over-powered the
+        // tail_follow `-f` discriminator (BM25 score 12.61 vs 7.70). Tail
+        // template restructure would need command-prefix path changes,
+        // not just refinement. Defer.
+        negativeKeywords: ["grep", "error|warning", "search"]            // T1.2 only
       ),
       "mdfind_search": TemplateOverlay(
         // T1.2: 'search for hello world' was routing to Spotlight on
@@ -266,12 +268,16 @@ public enum TemplateRefinements {
           // regressed "yo list my files bro" (NegativeEdge).
           "list javascript files",
           "list all .ts files",
-          // T1.8 attempt rolled back: addIntents for literal CLI form
-          // "find -name '*.X' -type f" perturbed BM25 enough to steal
-          // NL "find files with HOME in their name" from find_by_name.
-          // Real fix: strip surrounding quotes in .glob/.path sanitize
-          // so find_by_name's broken double-quoted output goes away
-          // (see SlotExtractor.swift sanitize update in T1.8).
+          // D.3: ALL-CAPS configuration-style identifiers. These don't
+          // match any specific extension regex but should be treated as
+          // extension-like tokens (the .fileExtension lowercase fallback
+          // produces *.config / *.env / *.log / etc.). Specific phrases
+          // to avoid the "find files with HOME in their name" regression
+          // that broader chunking caused in T1.8.
+          "find CONFIG files",
+          "find ENV files",
+          "find LOG files",
+          "find DATA files",
         ]
       ),
 
