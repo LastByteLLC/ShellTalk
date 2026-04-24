@@ -185,6 +185,28 @@ public enum TemplateRefinements {
         ],
         discriminators: ["grep"]                                         // command-prefix anchor
       ),
+      // tail_file additions reverted — caused 'tail -f server.log' regression
+      // even with tail_follow discriminator '-f'. Defer to a more careful
+      // tail-template restructure later.
+      "git_blame": TemplateOverlay(
+        addIntents: [                                                    // round-c sweep
+          "who changed FILE",
+          "who edited FILE",
+          "who changed AppDelegate.swift",
+          "who modified this code",
+        ],
+        discriminators: ["blame", "who"]
+      ),
+      "gzip_file": TemplateOverlay(
+        addIntents: [                                                    // round-c sweep
+          "compress the file",
+          "compress single file",
+        ],
+        discriminators: ["gzip", "gz"]
+      ),
+      "xz_compress": TemplateOverlay(
+        negativeKeywords: ["the file", "single"]                         // round-c — push back from generic compress
+      ),
       "tail_follow": TemplateOverlay(
         // T1.2: 'grep ... in log.txt' was hijacked by tail_follow via
         // 'log' / 'log.txt' overlap. Grep is never tail.
@@ -371,6 +393,7 @@ public enum TemplateRefinements {
         negativeKeywords: [
           "-sI", "-I", "headers",                                         // cand-053
           "users", "filter", "active", "endpoint",                       // T1.7
+          "data",                                                        // round-c sweep
         ]
       ),
       "openssl_check": TemplateOverlay(
