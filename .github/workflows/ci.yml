@@ -199,10 +199,29 @@ jobs:
         run: swift --version
 
       - name: Install Swift SDK for WASM
-        run: >-
-          swift sdk install
-          https://github.com/swiftwasm/swift/releases/download/swift-wasm-6.3-RELEASE/swift-wasm-6.3-RELEASE-wasm32-unknown-wasip1.artifactbundle.zip
-          --checksum 6704d137e532f1ac31eafedd80658f9ee61239f2b6291216a02da32361ea9dcb
+        # `swift sdk install` has a known teardown race on Linux: after
+        # successfully downloading, verifying, and unpacking the artifact
+        # bundle, `swift-package` can SIGSEGV during process exit inside
+        # libdispatch cleanup. The SDK ends up installed correctly but
+        # the shell sees exit 139 (128+11). We tolerate that specific
+        # exit code ONLY when `swift sdk list` confirms the bundle landed —
+        # any other failure still propagates.
+        run: |
+          set +e
+          swift sdk install \
+            https://github.com/swiftwasm/swift/releases/download/swift-wasm-6.3-RELEASE/swift-wasm-6.3-RELEASE-wasm32-unknown-wasip1.artifactbundle.zip \
+            --checksum 6704d137e532f1ac31eafedd80658f9ee61239f2b6291216a02da32361ea9dcb
+          rc=$?
+          set -e
+          if [ $rc -eq 0 ]; then
+            exit 0
+          fi
+          if [ $rc -eq 139 ] && swift sdk list | grep -q 'swift-wasm-6.3-RELEASE'; then
+            echo "::warning::swift sdk install exited with SIGSEGV (known teardown bug) but SDK is installed; continuing."
+            exit 0
+          fi
+          echo "::error::swift sdk install failed with exit $rc"
+          exit $rc
 
       - name: Remove embedded SDK variant (no Foundation)
         run: find / -path '*/swift-sdks/*/embedded-swift-sdk.json' -delete 2>/dev/null || true
