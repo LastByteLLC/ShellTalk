@@ -56,7 +56,7 @@ and familiarity with the harness loop.
 | ~~T1.5~~ | ~~`git_commit_push` + `build_and_test` compound templates~~ | A | ~40 | low | **Shipped `ecccc2d`** — Chained 0.67 → 1.00 |
 | T1.6 | `awk_column` FILE slot: no-filename case emits `stdin` not `{FILE}` | C | ~5 | low | cleanup UX |
 | T1.7 | `.url` with query-string + fragment preservation | C | ~15 | low | WildCompoundEntities (curl_get tier) |
-| T1.8 | TerseWithFlags audit — missing `-n` / `-l` / `--long` patterns | B | variable | low | TerseWithFlags → ~0.80 |
+| ~~T1.8~~ | ~~TerseWithFlags audit~~ | B+C | ~44 | low | **Shipped `dedca5f`** — TerseWithFlags 0.80 → 1.00 + global slot quote-strip |
 
 **Sequencing**: all T1 candidates are independent of each other. Any can
 be picked up in isolation. Recommended execution order by value density:
