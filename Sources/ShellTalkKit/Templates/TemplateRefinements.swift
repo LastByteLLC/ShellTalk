@@ -427,12 +427,9 @@ public enum TemplateRefinements {
         discriminators: ["disk", "info", "free"]                         // cand-036
       ),
       "du_disk_usage": TemplateOverlay(
-        addIntents: [                                                    // D.4 — boost over df_disk_free knife-edge
+        addIntents: [                                                    // D.4 — knife-edge boost, narrow phrases only
           "what's using the most disk space",
           "what is using the most disk space",
-          "what's using disk space",
-          "what files use the most disk space",
-          "biggest disk usage",
         ],
         negativeKeywords: ["info"],                                      // cand-036
         discriminators: ["du", "-sh"]                                    // T2.2 — anchor for "du -sh ~/Documents"
