@@ -283,23 +283,127 @@ public struct CommandHealer: Sendable {
       #"invalid option:?\s+(-{1,2}\S+)"#,
     ]
 
+    let cmdName = original.split(separator: " ").first.map(String.init) ?? ""
+
     for pattern in patterns {
       if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
          let match = regex.firstMatch(in: stderr, range: NSRange(stderr.startIndex..., in: stderr)),
          match.numberOfRanges > 1,
          let range = Range(match.range(at: 1), in: stderr) {
         let badFlag = String(stderr[range])
-        let stripped = original.replacingOccurrences(of: " -\(badFlag)", with: "")
-          .replacingOccurrences(of: " --\(badFlag)", with: "")
+
+        // T1.4: try long→short flag mapping for the offending command
+        // before falling back to flag removal. macOS BSD utilities
+        // typically don't support GNU-style long options.
+        if let shortForm = Self.longToShortFlag(command: cmdName, longFlag: badFlag) {
+          // Replace --longflag (or --longflag=val) with -shortform
+          let healed = replaceLongFlag(in: original, longFlag: badFlag, shortForm: shortForm)
+          if healed != original {
+            return HealResult(
+              healed: true, command: healed, category: .flagUnknown,
+              explanation: "Replaced unsupported '\(badFlag)' with short form '\(shortForm)' for \(cmdName)."
+            )
+          }
+        }
+
+        // Normalize badFlag: regex may capture with leading dashes
+        // ("--foo") or without ("v" from BSD's "illegal option -- v").
+        let bare: String
+        if badFlag.hasPrefix("--") { bare = String(badFlag.dropFirst(2)) }
+        else if badFlag.hasPrefix("-") { bare = String(badFlag.dropFirst()) }
+        else { bare = badFlag }
+        let stripped = original.replacingOccurrences(of: " --\(bare)", with: "")
+          .replacingOccurrences(of: " -\(bare)", with: "")
         if stripped != original {
           return HealResult(healed: true, command: stripped, category: .flagUnknown,
-                            explanation: "Removed unsupported flag: -\(badFlag)")
+                            explanation: "Removed unsupported flag: --\(bare)")
         }
       }
     }
 
     return HealResult(healed: false, command: original, category: .flagUnknown,
-                      explanation: "Unknown flag. Check command help: \(original.split(separator: " ").first ?? "") --help")
+                      explanation: "Unknown flag. Check command help: \(cmdName) --help")
+  }
+
+  /// Map a long-form flag to its conventional BSD short form for known
+  /// commands. Returns nil if no mapping exists. Returns the short form
+  /// WITHOUT the leading dash.
+  private static func longToShortFlag(command: String, longFlag: String) -> String? {
+    // Normalize: strip leading dashes from longFlag if present.
+    let lf: String
+    if longFlag.hasPrefix("--") { lf = String(longFlag.dropFirst(2)) }
+    else if longFlag.hasPrefix("-") { lf = String(longFlag.dropFirst()) }
+    else { lf = longFlag }
+    let key = "\(command):\(lf.lowercased())"
+    return commonLongShortMap[key]
+  }
+
+  /// Curated long→short flag mapping for common BSD command quirks. Each
+  /// key is `command:longflag` (lowercased, no dashes). Value is the
+  /// short form without dashes. Limited to high-confidence equivalents.
+  private static let commonLongShortMap: [String: String] = [
+    "ls:verbose":         "l",      // ls --verbose ≈ ls -l (closest BSD)
+    "ls:long":            "l",
+    "ls:all":             "a",
+    "ls:human-readable":  "h",
+    "ls:reverse":         "r",
+    "grep:invert-match":  "v",
+    "grep:line-number":   "n",
+    "grep:recursive":     "r",
+    "grep:ignore-case":   "i",
+    "grep:count":         "c",
+    "grep:files-with-matches": "l",
+    "tail:lines":         "n",
+    "tail:follow":        "f",
+    "tail:bytes":         "c",
+    "head:lines":         "n",
+    "head:bytes":         "c",
+    "wc:lines":           "l",
+    "wc:words":           "w",
+    "wc:bytes":           "c",
+    "wc:chars":           "m",
+    "sort:reverse":       "r",
+    "sort:numeric-sort":  "n",
+    "sort:unique":        "u",
+    "cp:recursive":       "R",
+    "cp:verbose":         "v",
+    "cp:force":           "f",
+    "rm:recursive":       "r",
+    "rm:force":           "f",
+    "rm:verbose":         "v",
+    "mv:verbose":         "v",
+    "mv:force":           "f",
+    "du:human-readable":  "h",
+    "du:summarize":       "s",
+    "df:human-readable":  "h",
+  ]
+
+  /// Replace a long flag (with optional `=value`) by its short equivalent.
+  /// Converts `--lines=20` → `-n 20` (space separator — the BSD form).
+  private func replaceLongFlag(in command: String, longFlag: String, shortForm: String) -> String {
+    let lf: String
+    if longFlag.hasPrefix("--") { lf = String(longFlag.dropFirst(2)) }
+    else if longFlag.hasPrefix("-") { lf = String(longFlag.dropFirst()) }
+    else { lf = longFlag }
+
+    // Match "--longflag=value" first (with value); convert to "-X value".
+    let escaped = NSRegularExpression.escapedPattern(for: lf)
+    if let regexEq = try? NSRegularExpression(pattern: "--\(escaped)=(\\S+)") {
+      let nsRange = NSRange(command.startIndex..., in: command)
+      let withValueReplaced = regexEq.stringByReplacingMatches(
+        in: command, range: nsRange, withTemplate: "-\(shortForm) $1"
+      )
+      if withValueReplaced != command { return withValueReplaced }
+    }
+
+    // Match bare "--longflag" (no value).
+    guard let regex = try? NSRegularExpression(
+      pattern: "--\(escaped)\\b"
+    ) else { return command }
+    let nsRange = NSRange(command.startIndex..., in: command)
+    return regex.stringByReplacingMatches(
+      in: command, range: nsRange, withTemplate: "-\(shortForm)"
+    )
   }
 
   private func healFileNotFound(original: String, stderr: String) -> HealResult {

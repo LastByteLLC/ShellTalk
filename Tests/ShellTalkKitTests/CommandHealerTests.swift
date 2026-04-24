@@ -181,6 +181,52 @@ struct CommandHealerTests {
     #expect(catNet == .networkError)
   }
 
+  // MARK: - Long→short flag corrections (T1.4 round-b)
+
+  @Test("Heals --invert-match → -v on grep")
+  func longShortGrepInvert() {
+    let healer = makeHealer(os: .macOS)
+    let r = healer.heal(
+      original: "grep --invert-match foo file.txt",
+      result: ShellResult(stdout: "", stderr: "grep: unrecognized option: --invert-match", exitCode: 1)
+    )
+    #expect(r.healed)
+    #expect(r.command == "grep -v foo file.txt")
+  }
+
+  @Test("Heals --lines=20 → -n 20 on tail (preserves value)")
+  func longShortTailLinesValue() {
+    let healer = makeHealer(os: .macOS)
+    let r = healer.heal(
+      original: "tail --lines=20 server.log",
+      result: ShellResult(stdout: "", stderr: "tail: unknown option: --lines", exitCode: 1)
+    )
+    #expect(r.healed)
+    #expect(r.command == "tail -n 20 server.log")
+  }
+
+  @Test("Heals --recursive → -R on cp (uppercase short form)")
+  func longShortCpRecursive() {
+    let healer = makeHealer(os: .macOS)
+    let r = healer.heal(
+      original: "cp --recursive src/ dst/",
+      result: ShellResult(stdout: "", stderr: "cp: unknown option --recursive", exitCode: 1)
+    )
+    #expect(r.healed)
+    #expect(r.command == "cp -R src/ dst/")
+  }
+
+  @Test("Falls through to flag-removal when no mapping exists")
+  func longShortFallthrough() {
+    let healer = makeHealer(os: .macOS)
+    let r = healer.heal(
+      original: "ls --gibberish /tmp",
+      result: ShellResult(stdout: "", stderr: "ls: unrecognized option: --gibberish", exitCode: 1)
+    )
+    #expect(r.healed)
+    #expect(!r.command.contains("--gibberish"))
+  }
+
   // MARK: - Helpers
 
   private func makeHealer(os: OS) -> CommandHealer {
