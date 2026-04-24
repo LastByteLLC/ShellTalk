@@ -2,7 +2,7 @@
 
 | state | n_cases | tpl_acc | cat_acc | substr_acc | slot_acc | BM25 lane | p95_ms | notes |
 |---|---:|---:|---:|---:|---:|---:|---:|---|
-| **shipped (main)** | **454** | **0.9780** | **0.9890** | **0.9815** | **0.9155** | **0.925** | 358 | Run 2026-04-24-tier-1-2: Tier 1 (T1.1-T1.8) + Tier 2 (T2.1-T2.4) shipped + post-Tier sweeps (conversational filter, wild-cleanup, sweep-cleanup, healing diag, gold corrections). 28 of 35 suites at 100%. **170 tests**. |
+| **shipped (main)** | **454** | **0.9824** | **0.9912** | **0.9866** | **0.9296** | **0.933** | 357 | Run 2026-04-24-tier-1-2 + Round D: Tier 1 (T1.1-T1.8) + Tier 2 (T2.1-T2.4) + Round D phases (D.3 CONFIG routing, D.4 du knife-edge, D.5 cp/mv slot regex). 29 of 35 suites at 100%. **170 tests**. |
 | pre-round-a wildtests shipped | 442 | 0.9321 | 0.9661 | 0.9574 | 0.9643 | 0.784 | 424 | Run 2026-04-23-wildtests: 5 candidates (routing, typo healing, range/no-merges templates, alternatives display). 31 refinements. |
 | pre-tier1-2 round-a shipped | 443 | 0.9345 | 0.9661 | 0.9593 | 0.9667 | 0.790 | 680 | Run 2026-04-23-round-a: slot-extraction polish on top of wildtests. |
 | pre-wildtests shipped | 397 | 0.9597 | 0.9849 | 0.9742 | 0.9592 | 0.850 | 389 | `.fileExtension` slot type + canonical alias table + find_by_extension routing (run 2026-04-23-fileext). 20 refinements. |
