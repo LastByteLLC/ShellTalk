@@ -144,6 +144,14 @@ public final class IntentMatcher: Sendable {
 
   /// Check whether the query likely contains typos by looking for tokens
   /// that aren't recognized as anchor words, entities, or structured data.
+  ///
+  /// Heuristic tightened after measuring Linux false-positives: if MOST of
+  /// the content tokens look unrecognized, it's almost certainly an
+  /// off-topic / conversational query (e.g., "what is the meaning of
+  /// life"), not a typo. Aggressive correction in that case would silently
+  /// reinterpret the query ("meaning" → "merging", "life" → "line")
+  /// and match it against an unrelated template. Require typos to be the
+  /// minority of content tokens to guard against that.
   private func queryLikelyHasTypos(_ query: String, entities: [RecognizedEntity]) -> Bool {
     let tokens = BM25.tokenize(query)
     let entityTexts = Set(
@@ -194,11 +202,18 @@ public final class IntentMatcher: Sendable {
     let bm25Result = bm25Match(query, entities: entities)
 
     // Fast path 2: Phrase match — compound concepts
-    // BM25 overrides phrase match only if it scores > 5.0 AND picked a different template
+    // BM25 overrides phrase match only when it scores very confidently
+    // AND picked a different template. On platforms with NLEmbedding
+    // rerank (macOS/iOS) we trust the BM25 result above 5.0 because
+    // rerank has already validated the re-ordering. When rerank is
+    // unavailable (Linux / WASI — `embedding.isAvailable == false`) we
+    // raise the override threshold to 8.0 so phrase-index picks carry
+    // more weight. This closes the Linux phrase-path regression (E1).
     if let phraseResult = tryPhraseMatch(normalized) {
       if let bm25 = bm25Result {
         let bm25Score = bm25.categoryScore * 0.3 + bm25.templateScore * 0.7
-        if bm25Score > 5.0 && bm25.templateId != phraseResult.templateId {
+        let overrideThreshold = embedding.isAvailable ? 5.0 : 8.0
+        if bm25Score > overrideThreshold && bm25.templateId != phraseResult.templateId {
           return bm25
         }
       }

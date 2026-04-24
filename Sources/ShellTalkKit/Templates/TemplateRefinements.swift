@@ -39,6 +39,9 @@ public enum TemplateRefinements {
         negativeKeywords: ["rename", "diff", "compare"]                  // cand-001, cand-027 + round-c
       ),
       "rm_file": TemplateOverlay(
+        addIntents: [                                                    // E4
+          "remove the old log files",                                     // targeted: was phrase-mapped to find_by_extension
+        ],
         discriminators: ["delete", "remove", "trash", "erase", "old"]    // cand-019
       ),
       "find_and_delete": TemplateOverlay(
@@ -195,7 +198,41 @@ public enum TemplateRefinements {
           "who changed AppDelegate.swift",
           "who modified this code",
         ],
+        negativeKeywords: ["info", "content", "size", "type"],           // E3: "file info" / "file content" belong to file_info
         discriminators: ["blame", "who"]
+      ),
+      // E3: lsof_open_files poaches "open README.md" queries via the common
+      // "open" token shared with all its intents. Penalize when the query
+      // names a specific file (by extension or document type) — those
+      // queries want `open_file` (macOS) or nano/vim.
+      "lsof_open_files": TemplateOverlay(
+        negativeKeywords: [
+          "readme", "config", "package",
+          "md", "txt", "yml", "yaml", "json", "toml", "xml",
+          "doc", "pdf", "csv",
+        ]
+      ),
+      // E3: history_search matches any query containing weak generic verbs
+      // via BM25. When the user invokes a specific CLI, they do not want
+      // to search shell history.
+      "history_search": TemplateOverlay(
+        negativeKeywords: [
+          "docker", "kubectl", "aws", "git", "npm", "yarn", "pnpm",
+          "python", "node", "swift", "cargo", "rustc", "go",
+          "nginx", "postgres", "mysql", "redis",
+        ]
+      ),
+      // E3: for_lines over-matches conversational queries that happen to
+      // contain shell-scripting-adjacent words (e.g., "life" stemming
+      // toward "line" via BM25 tokenization collision, or common fillers).
+      // These are all words that never appear in a legitimate shell-loop
+      // request.
+      "for_lines": TemplateOverlay(
+        negativeKeywords: [
+          "meaning", "life", "love", "hate",
+          "what", "why", "how",
+          "tell", "explain", "describe",
+        ]
       ),
       "gzip_file": TemplateOverlay(
         addIntents: [                                                    // round-c sweep
@@ -257,6 +294,11 @@ public enum TemplateRefinements {
           // find_by_extension on "find X files" queries where X is a
           // language name. Narrow low-frequency tokens — minimal global
           // BM25 perturbation per F2.
+          // E4: adding "python files" (as a compound phrase) so phrase
+          // index picks up "list python files" in long polite-query
+          // wrappers. Bare "list" without language-name not added —
+          // that collides with ls_files.
+          "python files",
           "find ruby files",
           "find golang files",
           "find html files",
@@ -295,8 +337,46 @@ public enum TemplateRefinements {
         // T1.1: "what changed since Monday" was hijacked by git_diff
         // because "what changed" is a strong git_diff anchor. Weekday
         // tokens shouldn't pull queries here.
+        addIntents: [                                                    // E4
+          "show me what's different",
+          "what's different in git",
+        ],
         negativeKeywords: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
         discriminators: ["compare", "changes"]                           // cand-007 (preserved)
+      ),
+      // E4: targeted addIntents for phrase-path Linux regressions. On
+      // macOS the NLEmbedding rerank re-validates phrase picks; on
+      // Linux it doesn't, so the phrase index's wrong mapping wins
+      // directly. Adding these literal phrases to the right template
+      // makes the phrase index map them correctly at build time.
+      "git_status": TemplateOverlay(
+        addIntents: [
+          "show me uncommitted changes",
+          "my uncommitted changes",
+          "uncommitted work",
+        ]
+      ),
+      "zip_create": TemplateOverlay(
+        addIntents: [
+          "zip the documents folder",
+          "zip a folder",
+          "zip this directory",
+        ]
+      ),
+      "say_text": TemplateOverlay(
+        addIntents: [                                                    // E4
+          // Keep additions narrow — "say hello" maps the phrase-index
+          // entry so "say hello world" routes here without colliding
+          // with grep_search intents that legitimately contain "hello world".
+          "say hello",
+        ]
+      ),
+      "find_by_name": TemplateOverlay(
+        addIntents: [
+          "find files with NAME in their name",
+          "find files named NAME",
+          "files with NAME in name",
+        ]
       ),
       "file_info": TemplateOverlay(
         // T1.8: 'find . -name *.py -type f' was routing here because
