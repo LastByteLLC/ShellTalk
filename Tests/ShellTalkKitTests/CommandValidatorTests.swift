@@ -77,4 +77,85 @@ struct CommandValidatorTests {
     #expect(result.commandExists)
     #expect(result.syntaxValid)
   }
+
+  // MARK: - isTriviallyValidSyntax fast-path invariant
+  //
+  // These tests pin down the safety invariant: the fast path returns
+  // `true` only when bash -n would also return 0. We assert that every
+  // case accepted by the fast path also passes a live `bash -n` subprocess
+  // (matching semantics), and every case rejected by the fast path is
+  // either also rejected by bash or legitimately complex (deferred).
+
+  private static let fastPathAccepts: [String] = [
+    "ls",
+    "ls -la",
+    "git status",
+    "find . -type f",
+    "find . -name '*.swift' -type f",
+    "grep -rn 'TODO' .",
+    "echo \"hello world\"",
+    "du -sh *",
+    "chmod +x script.sh",
+    "cat a.txt | grep pattern",
+    "ls && pwd",
+    "ls || true",
+    "cat a.txt > b.txt",
+    "echo $HOME",
+    "echo ${HOME}",
+    "echo \"${HOME}\"",
+    "find . -exec rm {} +",
+    "tar -xzf archive.tar.gz",
+    "sed -i '' 's/old/new/g' file.txt",
+    "curl -s -X POST -H 'Content-Type: application/json' -d '{\"a\":1}' 'https://x.y/z'",
+    "rm -rf /tmp/foo",
+  ]
+
+  private static let fastPathFallsThrough: [String] = [
+    "echo $(date)",                    // $(...) command substitution
+    "echo `date`",                      // backtick substitution
+    "(cd dir && ls)",                   // subshell
+    "cat <<EOF\nhi\nEOF",                // here-doc + newline
+    "cmd |",                            // trailing pipe
+    "cmd &&",                           // trailing logical op
+    "cmd \\",                           // trailing backslash
+    "echo \"foo",                       // unbalanced double quote
+    "echo 'foo",                        // unbalanced single quote
+    "echo ${foo",                       // unclosed ${...}
+  ]
+
+  @Test("Fast-path accepts simple commands", arguments: fastPathAccepts)
+  func fastPathAcceptsSimple(cmd: String) {
+    #expect(CommandValidator.isTriviallyValidSyntax(cmd))
+  }
+
+  @Test("Fast-path falls through on complex or invalid commands",
+        arguments: fastPathFallsThrough)
+  func fastPathFallsThroughOnComplex(cmd: String) {
+    #expect(!CommandValidator.isTriviallyValidSyntax(cmd))
+  }
+
+  #if !os(WASI) && !os(Linux)
+  /// Invariant check: every fast-path acceptance must also be accepted
+  /// by the real bash. If this ever regresses, the fast path has a
+  /// false-positive and validity guarantees have been broken.
+  @Test("Invariant: fast-path accept ⇒ bash -n accepts", arguments: fastPathAccepts)
+  func fastPathAcceptMatchesBashN(cmd: String) {
+    #expect(runBashN(cmd) == 0, "bash -n rejected a fast-path acceptance: \(cmd)")
+  }
+
+  private func runBashN(_ command: String) -> Int32 {
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: "/bin/bash")
+    p.arguments = ["-n", "-c", command]
+    p.standardOutput = FileHandle.nullDevice
+    p.standardError = FileHandle.nullDevice
+    do {
+      try p.run()
+      p.waitUntilExit()
+      return p.terminationStatus
+    } catch {
+      return -1
+    }
+  }
+  #endif
 }

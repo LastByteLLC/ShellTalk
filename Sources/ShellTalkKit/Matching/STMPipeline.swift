@@ -91,7 +91,7 @@ public final class STMPipeline: Sendable {
     config: PipelineConfig = .default
   ) {
     let initStart = PipelineTimer.now()
-    let prof = profile ?? SystemProfile.detect()
+    let prof = profile ?? SystemProfile.cached
     var st = store ?? TemplateStore.builtIn()
     var cfg = config
 
@@ -170,15 +170,8 @@ public final class STMPipeline: Sendable {
     }
 
     // Post-process: normalize human words to flag values
-    let valueNormalization: [String: String] = [
-      "lines": "l", "line": "l",
-      "words": "w", "word": "w",
-      "characters": "c", "chars": "c", "char": "c",
-      "bytes": "c",
-      "code": "l",
-    ]
     for (name, value) in slots {
-      if let normalized = valueNormalization[value.lowercased()] {
+      if let normalized = Self.valueNormalization[value.lowercased()] {
         slots[name] = normalized
       }
     }
@@ -256,13 +249,21 @@ public final class STMPipeline: Sendable {
 
   // MARK: - Helpers
 
+  /// Human-word → flag-value normalization for post-processing extracted slots.
+  /// Hoisted out of `process()` so it's not reallocated per query.
+  private static let valueNormalization: [String: String] = [
+    "lines": "l", "line": "l",
+    "words": "w", "word": "w",
+    "characters": "c", "chars": "c", "char": "c",
+    "bytes": "c",
+    "code": "l",
+  ]
+
   private func resolvePlatformSlotsUsed(in command: String) -> [String: String] {
     let platformSlots = PlatformSlots(profile: profile)
     var resolved: [String: String] = [:]
 
-    let pattern = #"\{([A-Z][A-Z0-9_]+)\}"#
-    guard let regex = try? NSRegularExpression(pattern: pattern) else { return resolved }
-
+    let regex = TemplateResolver.platformSlotRegex
     let matches = regex.matches(in: command, range: NSRange(command.startIndex..., in: command))
     for match in matches {
       if let range = Range(match.range(at: 1), in: command) {

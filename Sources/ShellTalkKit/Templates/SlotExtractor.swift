@@ -242,10 +242,37 @@ public struct SlotExtractor: Sendable {
 
   // MARK: - Regex Extraction
 
-  private func extractByRegex(pattern: String, from text: String) -> String? {
+  /// Pre-compiled regex for the N-unit form in `resolveRelativeDays`
+  /// (e.g., "3 days", "2 weeks"). Compiled once at load time.
+  private static let relativeDaysRegex: NSRegularExpression =
+    try! NSRegularExpression(pattern: #"^(\d+)\s+(days?|weeks?|months?|years?)$"#)
+
+  /// Process-wide cache of compiled template extract-pattern regexes.
+  /// Template `extractPattern` strings are drawn from a fixed set (~245
+  /// templates); this fills within a few queries and every subsequent
+  /// lookup is O(1). NSCache is thread-safe internally; the
+  /// `nonisolated(unsafe)` annotation tells Swift 6 strict concurrency
+  /// we've audited this.
+  nonisolated(unsafe) private static let patternCache: NSCache<NSString, NSRegularExpression> = {
+    let cache = NSCache<NSString, NSRegularExpression>()
+    cache.countLimit = 512
+    return cache
+  }()
+
+  private static func compiledPattern(_ pattern: String) -> NSRegularExpression? {
+    let key = pattern as NSString
+    if let cached = patternCache.object(forKey: key) {
+      return cached
+    }
     guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
       return nil
     }
+    patternCache.setObject(regex, forKey: key)
+    return regex
+  }
+
+  private func extractByRegex(pattern: String, from text: String) -> String? {
+    guard let regex = Self.compiledPattern(pattern) else { return nil }
     let range = NSRange(text.startIndex..., in: text)
     guard let match = regex.firstMatch(in: text, range: range) else { return nil }
 
@@ -264,9 +291,7 @@ public struct SlotExtractor: Sendable {
   /// this returns "a.txt b.txt". Used for multi-source slots like cp/mv
   /// when SlotDefinition.multi is true.
   private func extractAllMatches(pattern: String, from text: String) -> String? {
-    guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
-      return nil
-    }
+    guard let regex = Self.compiledPattern(pattern) else { return nil }
     let range = NSRange(text.startIndex..., in: text)
     let matches = regex.matches(in: text, range: range)
     guard !matches.isEmpty else { return nil }
@@ -338,10 +363,11 @@ public struct SlotExtractor: Sendable {
       return diff == 0 ? "7" : String(diff)
     }
 
-    // N unit form
-    let pattern = #"^(\d+)\s+(days?|weeks?|months?|years?)$"#
-    if let match = lower.range(of: pattern, options: .regularExpression) {
-      let body = String(lower[match])
+    // N unit form — pattern compiled once at load time
+    let nsRange = NSRange(lower.startIndex..., in: lower)
+    if let match = Self.relativeDaysRegex.firstMatch(in: lower, range: nsRange),
+       let matchRange = Range(match.range, in: lower) {
+      let body = String(lower[matchRange])
       let parts = body.split(separator: " ")
       if parts.count == 2, let n = Int(parts[0]) {
         let unit = String(parts[1])

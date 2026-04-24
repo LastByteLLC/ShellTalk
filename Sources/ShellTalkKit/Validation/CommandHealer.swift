@@ -233,14 +233,17 @@ public struct CommandHealer: Sendable {
   ///   "cat: /etc/shadow: Permission denied"
   ///   "bash: /etc/shadow: Permission denied"
   ///   "/etc/shadow: Permission denied"
+  /// Pre-compiled regexes for Permission-denied stderr forms.
+  /// Compiled once at load; previously recompiled on every call.
+  private static let permissionErrorRegexes: [NSRegularExpression] = [
+    try! NSRegularExpression(pattern: #"[a-zA-Z]+:\s+(\S+):\s+Permission denied"#, options: .caseInsensitive),
+    try! NSRegularExpression(pattern: #"^(\S+):\s+Permission denied"#, options: .caseInsensitive),
+  ]
+
   private func extractPathFromPermissionError(_ stderr: String) -> String? {
-    let patterns = [
-      #"[a-zA-Z]+:\s+(\S+):\s+Permission denied"#,
-      #"^(\S+):\s+Permission denied"#,
-    ]
-    for pattern in patterns {
-      if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
-         let m = regex.firstMatch(in: stderr, range: NSRange(stderr.startIndex..., in: stderr)),
+    let nsRange = NSRange(stderr.startIndex..., in: stderr)
+    for regex in Self.permissionErrorRegexes {
+      if let m = regex.firstMatch(in: stderr, range: nsRange),
          m.numberOfRanges > 1,
          let r = Range(m.range(at: 1), in: stderr) {
         return String(stderr[r])
@@ -319,21 +322,20 @@ public struct CommandHealer: Sendable {
                       explanation: "BSD/GNU flag mismatch. Check platform-specific flags.")
   }
 
+  /// Pre-compiled regexes for "unknown flag" stderr forms.
+  private static let flagUnknownRegexes: [NSRegularExpression] = [
+    try! NSRegularExpression(pattern: #"illegal option -- (\w)"#, options: .caseInsensitive),
+    try! NSRegularExpression(pattern: #"unknown option:?\s+(-{1,2}\S+)"#, options: .caseInsensitive),
+    try! NSRegularExpression(pattern: #"unrecognized option:?\s+(-{1,2}\S+)"#, options: .caseInsensitive),
+    try! NSRegularExpression(pattern: #"invalid option:?\s+(-{1,2}\S+)"#, options: .caseInsensitive),
+  ]
+
   private func healFlagUnknown(original: String, stderr: String) -> HealResult {
-    // Try to extract the bad flag from stderr
-    // Common patterns: "illegal option -- x", "unknown option: --foo"
-    let patterns = [
-      #"illegal option -- (\w)"#,
-      #"unknown option:?\s+(-{1,2}\S+)"#,
-      #"unrecognized option:?\s+(-{1,2}\S+)"#,
-      #"invalid option:?\s+(-{1,2}\S+)"#,
-    ]
-
     let cmdName = original.split(separator: " ").first.map(String.init) ?? ""
+    let nsRange = NSRange(stderr.startIndex..., in: stderr)
 
-    for pattern in patterns {
-      if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
-         let match = regex.firstMatch(in: stderr, range: NSRange(stderr.startIndex..., in: stderr)),
+    for regex in Self.flagUnknownRegexes {
+      if let match = regex.firstMatch(in: stderr, range: nsRange),
          match.numberOfRanges > 1,
          let range = Range(match.range(at: 1), in: stderr) {
         let badFlag = String(stderr[range])
@@ -452,17 +454,18 @@ public struct CommandHealer: Sendable {
     )
   }
 
+  /// Pre-compiled regexes for "file not found" stderr forms.
+  private static let fileNotFoundRegexes: [NSRegularExpression] = [
+    try! NSRegularExpression(pattern: #"No such file or directory:\s*(\S+)"#),
+    try! NSRegularExpression(pattern: #"cannot stat '([^']+)'"#),
+    try! NSRegularExpression(pattern: #"'([^']+)': No such file"#),
+  ]
+
   private func healFileNotFound(original: String, stderr: String) -> HealResult {
     // Extract the missing path from stderr
-    let patterns = [
-      #"No such file or directory:\s*(\S+)"#,
-      #"cannot stat '([^']+)'"#,
-      #"'([^']+)': No such file"#,
-    ]
-
-    for pattern in patterns {
-      if let regex = try? NSRegularExpression(pattern: pattern),
-         let match = regex.firstMatch(in: stderr, range: NSRange(stderr.startIndex..., in: stderr)),
+    let nsRange = NSRange(stderr.startIndex..., in: stderr)
+    for regex in Self.fileNotFoundRegexes {
+      if let match = regex.firstMatch(in: stderr, range: nsRange),
          match.numberOfRanges > 1,
          let range = Range(match.range(at: 1), in: stderr) {
         let missingPath = String(stderr[range])

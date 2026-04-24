@@ -142,7 +142,7 @@ struct ShellTalk: ParsableCommand {
           printError(shellResult.stderr)
         }
         if !shellResult.succeeded {
-          let healer = CommandHealer(profile: SystemProfile.detect())
+          let healer = CommandHealer(profile: SystemProfile.cached)
           let healResult = healer.heal(original: result.command, result: shellResult)
           if healResult.healed {
             printWarning("Healed: \(healResult.explanation)")
@@ -175,7 +175,7 @@ struct ShellTalk: ParsableCommand {
   // MARK: - Heal Mode
 
   private func runHeal(command: String) {
-    let sysProfile = SystemProfile.detect()
+    let sysProfile = SystemProfile.cached
     let healer = CommandHealer(profile: sysProfile)
     let result = ShellResult(stdout: "", stderr: stderr ?? "", exitCode: 1)
     let healResult = healer.heal(original: command, result: result)

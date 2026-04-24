@@ -72,10 +72,8 @@ public final class TemplateStore: Sendable {
             // Only add if no conflict, or prefer template with shorter command
             if let existing = exact[normalized],
                let existingTemplate = map[existing]?.1 {
-              let existingCmdLen = existingTemplate.command.replacingOccurrences(
-                of: #"\{[A-Z_]+\}"#, with: "", options: .regularExpression).count
-              let newCmdLen = template.command.replacingOccurrences(
-                of: #"\{[A-Z_]+\}"#, with: "", options: .regularExpression).count
+              let existingCmdLen = Self.commandLenExcludingPlaceholders(existingTemplate.command)
+              let newCmdLen = Self.commandLenExcludingPlaceholders(template.command)
               if newCmdLen < existingCmdLen {
                 exact[normalized] = template.id
               }
@@ -143,13 +141,10 @@ public final class TemplateStore: Sendable {
             for i in 0...(max(0, words.count - n)) {
               guard i + n <= words.count else { break }
               let phrase = words[i..<(i + n)].joined(separator: " ")
-              // Only index phrases where at least one word is not a stop word
               // Only index phrases where ALL words are content words (not stop words)
               // and at least one word is specific (not a common verb)
-              let commonVerbs: Set<String> = ["list", "show", "find", "search", "create",
-                "delete", "remove", "run", "start", "stop", "check", "set", "add"]
               let allContent = words[i..<(i + n)].allSatisfy { !BM25.stopWords.contains($0) }
-              let hasSpecific = words[i..<(i + n)].contains { !commonVerbs.contains($0) }
+              let hasSpecific = words[i..<(i + n)].contains { !Self.phraseIndexCommonVerbs.contains($0) }
               if allContent && hasSpecific && phrases[phrase] == nil {
                 phrases[phrase] = template.id
               }
@@ -300,6 +295,27 @@ public final class TemplateStore: Sendable {
       .components(separatedBy: .whitespacesAndNewlines)
       .filter { !$0.isEmpty }
       .joined(separator: " ")
+  }
+
+  /// Common verbs excluded from the phrase-index (at least one token in
+  /// each n-gram must be more specific than these).
+  private static let phraseIndexCommonVerbs: Set<String> = [
+    "list", "show", "find", "search", "create",
+    "delete", "remove", "run", "start", "stop", "check", "set", "add",
+  ]
+
+  /// Count command-prefix length while excluding `{...}` placeholder spans.
+  /// Replaces a per-template regex strip that compiled `\{[A-Z_]+\}` in an
+  /// inner loop at index build time.
+  static func commandLenExcludingPlaceholders(_ command: String) -> Int {
+    var count = 0
+    var inside = false
+    for ch in command {
+      if ch == "{" { inside = true; continue }
+      if ch == "}" { inside = false; continue }
+      if !inside { count += 1 }
+    }
+    return count
   }
 
   /// Extract the command prefix from a template command string (up to first slot placeholder).

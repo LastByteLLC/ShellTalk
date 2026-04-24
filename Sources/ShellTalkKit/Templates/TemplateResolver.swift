@@ -53,11 +53,16 @@ public struct TemplateResolver: Sendable {
 
   // MARK: - Platform Slot Resolution
 
+  /// Pre-compiled slot-placeholder pattern, matching `{UPPERCASE_SLOT}`.
+  /// Public so STMPipeline can reuse the same compiled instance for its
+  /// debug-info platform-slot resolution.
+  static let platformSlotRegex: NSRegularExpression =
+    try! NSRegularExpression(pattern: #"\{([A-Z][A-Z0-9_]+)\}"#)
+
   private func resolvePlatformSlots(in command: String) -> String {
     var result = command
     // Find all {UPPERCASE_SLOT} patterns and try to resolve as platform slots
-    let slotPattern = #"\{([A-Z][A-Z0-9_]+)\}"#
-    guard let regex = try? NSRegularExpression(pattern: slotPattern) else { return result }
+    let regex = Self.platformSlotRegex
 
     let matches = regex.matches(in: result, range: NSRange(result.startIndex..., in: result))
 

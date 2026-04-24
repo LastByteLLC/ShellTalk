@@ -11,11 +11,22 @@ public struct BM25Document: Sendable {
   public let id: String
   public let tokens: [String]
   public let originalText: String
+  /// Pre-computed term-frequency map, built once at construction.
+  /// Previously recomputed on every (query × document) scoring call.
+  let termFreq: [String: Int]
+  /// Cached `Double(tokens.count)` — used in the hot scoring path.
+  let docLength: Double
 
   public init(id: String, text: String) {
     self.id = id
     self.originalText = text
-    self.tokens = BM25.tokenize(text)
+    let toks = BM25.tokenize(text)
+    self.tokens = toks
+    var tf: [String: Int] = [:]
+    tf.reserveCapacity(toks.count)
+    for token in toks { tf[token, default: 0] += 1 }
+    self.termFreq = tf
+    self.docLength = Double(toks.count)
   }
 }
 
@@ -88,14 +99,10 @@ public struct BM25: Sendable {
   }
 
   /// Compute BM25 score for a single document against a query.
+  /// Uses the pre-computed `termFreq` and `docLength` on `BM25Document`.
   private func computeScore(queryTokens: [String], document: BM25Document) -> Double {
-    let docLength = Double(document.tokens.count)
-
-    // Count term frequencies in document
-    var termFreq: [String: Int] = [:]
-    for token in document.tokens {
-      termFreq[token, default: 0] += 1
-    }
+    let docLength = document.docLength
+    let termFreq = document.termFreq
 
     var score = 0.0
     for term in queryTokens {

@@ -190,27 +190,30 @@ public final class IntentMatcher: Sendable {
 
   // MARK: - Fast Path: Meta-Question Detection
 
+  /// Pre-compiled meta-question patterns. Each pattern captures a command
+  /// name in group 1 and maps it to a template ID (man_page / command_help).
+  /// Previously rebuilt + recompiled per call.
+  private static let metaPatterns: [(regex: NSRegularExpression, templateId: String)] = [
+    // "how do I use grep" → man grep
+    (try! NSRegularExpression(pattern: #"how (?:do i|to|can i) (?:use|run|do) (\w+)"#, options: .caseInsensitive), "man_page"),
+    // "explain the find command" → man find
+    (try! NSRegularExpression(pattern: #"explain (?:the )?(\w+)(?: command)?"#, options: .caseInsensitive), "man_page"),
+    // "what does grep do" → man grep
+    (try! NSRegularExpression(pattern: #"what does (\w+) do"#, options: .caseInsensitive), "man_page"),
+    // "help with git" → man git
+    (try! NSRegularExpression(pattern: #"help (?:with|on|about) (\w+)"#, options: .caseInsensitive), "man_page"),
+    // "what flags does curl allow" → curl --help
+    (try! NSRegularExpression(pattern: #"what (?:flags|options|arguments|args) (?:does|can|are) (\w+)"#, options: .caseInsensitive), "command_help"),
+    // "show curl options" → curl --help
+    (try! NSRegularExpression(pattern: #"show (\w+) (?:options|flags|help)"#, options: .caseInsensitive), "command_help"),
+  ]
+
   /// Detect queries that are ABOUT a command rather than requesting a command.
   /// Routes to man_page or command_help templates.
   private func tryMetaQuestion(query: String, normalized: String) -> IntentMatchResult? {
-    let metaPatterns: [(pattern: String, templateId: String)] = [
-      // "how do I use grep" → man grep
-      (#"how (?:do i|to|can i) (?:use|run|do) (\w+)"#, "man_page"),
-      // "explain the find command" → man find
-      (#"explain (?:the )?(\w+)(?: command)?"#, "man_page"),
-      // "what does grep do" → man grep
-      (#"what does (\w+) do"#, "man_page"),
-      // "help with git" → man git
-      (#"help (?:with|on|about) (\w+)"#, "man_page"),
-      // "what flags does curl allow" → curl --help
-      (#"what (?:flags|options|arguments|args) (?:does|can|are) (\w+)"#, "command_help"),
-      // "show curl options" → curl --help
-      (#"show (\w+) (?:options|flags|help)"#, "command_help"),
-    ]
-
-    for (pattern, templateId) in metaPatterns {
-      guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
-            let match = regex.firstMatch(in: normalized, range: NSRange(normalized.startIndex..., in: normalized)),
+    let nsRange = NSRange(normalized.startIndex..., in: normalized)
+    for (regex, templateId) in Self.metaPatterns {
+      guard let match = regex.firstMatch(in: normalized, range: nsRange),
             match.numberOfRanges > 1,
             let cmdRange = Range(match.range(at: 1), in: normalized) else { continue }
 
@@ -798,6 +801,35 @@ public final class IntentMatcher: Sendable {
 
   // MARK: - Embedding Reranking (Lazy)
 
+  /// Boxed vector for NSCache storage.
+  private final class EmbeddingBox: Sendable {
+    let vector: [Float]
+    init(_ v: [Float]) { self.vector = v }
+  }
+
+  /// Process-wide cache of intent-phrase → embedding vector.
+  /// Template intent texts are drawn from a fixed set (~1300 phrases); each
+  /// phrase is embedded at most once per process. Previously, every query
+  /// that reached embedding rerank re-embedded every candidate template's
+  /// 5–8 intent phrases (~1–5ms of pure recomputation per query).
+  nonisolated(unsafe) private static let intentEmbeddingCache: NSCache<NSString, EmbeddingBox> = {
+    let c = NSCache<NSString, EmbeddingBox>()
+    c.countLimit = 4096
+    return c
+  }()
+
+  /// Look up an embedding for a template intent phrase, computing and
+  /// caching on miss.
+  private func cachedIntentEmbedding(_ text: String) -> [Float]? {
+    let key = text as NSString
+    if let hit = Self.intentEmbeddingCache.object(forKey: key) {
+      return hit.vector
+    }
+    guard let vec = embedding.embed(text) else { return nil }
+    Self.intentEmbeddingCache.setObject(EmbeddingBox(vec), forKey: key)
+    return vec
+  }
+
   /// Rerank BM25 candidates by embedding similarity.
   /// Only embeds the candidate templates' intents — not the entire corpus.
   private func rerankWithEmbeddings(
@@ -808,8 +840,8 @@ public final class IntentMatcher: Sendable {
       guard let template = store.template(byId: candidate.template.documentId) else {
         return candidate
       }
-      // Embed just this template's intents (typically 5-8 phrases, ~3ms)
-      let intentVecs = template.intents.compactMap { embedding.embed($0) }
+      // Embed just this template's intents (cached per-process).
+      let intentVecs = template.intents.compactMap { cachedIntentEmbedding($0) }
       guard !intentVecs.isEmpty else { return candidate }
 
       let similarities = intentVecs.map { cosineSimilarity(queryVector, $0) }

@@ -63,6 +63,13 @@ public struct SystemProfile: Sendable {
 
 extension SystemProfile {
 
+  /// Process-wide cached profile (fast path, no version probing).
+  /// First access triggers `detect()` (~50ms); all subsequent accesses are
+  /// zero-cost. Swift's `static let` lazy init is thread-safe. Use this
+  /// instead of `detect()` everywhere except `--profile` (which wants the
+  /// expensive `full: true` probe).
+  public static let cached: SystemProfile = detect()
+
   /// Auto-detect the current machine profile.
   /// Fast path (~15ms): skips version probing. Use `detect(full:)` for versions.
   /// On WASI/WASM, returns a minimal stub profile (no subprocess access).
@@ -318,9 +325,26 @@ extension SystemProfile {
   }
   #endif
 
+  /// Compiled-once cache keyed by pattern literal. The version-probe table
+  /// uses ~7 distinct patterns; compiling once per pattern amortizes over
+  /// the lifetime of the process (and per-probe across `full: true` calls).
+  nonisolated(unsafe) private static let extractFirstCache: NSCache<NSString, NSRegularExpression> = {
+    let c = NSCache<NSString, NSRegularExpression>()
+    c.countLimit = 32
+    return c
+  }()
+
   private static func extractFirst(pattern: String, from text: String) -> String? {
-    guard let regex = try? NSRegularExpression(pattern: pattern),
-          let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+    let key = pattern as NSString
+    let regex: NSRegularExpression
+    if let cached = extractFirstCache.object(forKey: key) {
+      regex = cached
+    } else {
+      guard let r = try? NSRegularExpression(pattern: pattern) else { return nil }
+      extractFirstCache.setObject(r, forKey: key)
+      regex = r
+    }
+    guard let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
           match.numberOfRanges > 1,
           let range = Range(match.range(at: 1), in: text)
     else { return nil }

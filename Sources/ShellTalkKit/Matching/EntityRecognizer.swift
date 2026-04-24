@@ -89,11 +89,12 @@ public enum RecognitionSource: String, Sendable {
 /// Multi-layer entity recognizer for CLI queries.
 public struct EntityRecognizer: Sendable {
   private let profile: SystemProfile
-  private let appNames: Set<String>
+  /// Installed applications, lowercased for O(1) case-insensitive lookup.
+  private let appNamesLower: Set<String>
 
   public init(profile: SystemProfile) {
     self.profile = profile
-    self.appNames = Self.discoverApplications()
+    self.appNamesLower = Set(Self.discoverApplications().map { $0.lowercased() })
   }
 
   /// Recognize all entities in a query string.
@@ -129,71 +130,10 @@ public struct EntityRecognizer: Sendable {
 
   private func recognizeStructural(_ query: String) -> [RecognizedEntity] {
     var entities: [RecognizedEntity] = []
-    let rules: [(String, EntityType, Float)] = [
-      // URLs (must come before path detection)
-      (#"https?://[^\s]+"#, .url, 0.95),
+    let nsRange = NSRange(query.startIndex..., in: query)
 
-      // Email addresses
-      (#"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"#, .email, 0.9),
-
-      // IP addresses
-      (#"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b"#, .ipAddress, 0.9),
-
-      // T1.3: Bare hostnames (example.com, api.github.com, my-server.local).
-      // Must come AFTER URL/email so https://x.com and a@b.com are
-      // captured as their richer types first. Excludes obvious file
-      // patterns (single .ext form) by requiring at least one dot AND
-      // a TLD-like suffix from the curated list, OR multi-label hyphen-
-      // bearing labels which file extensions don't have.
-      (#"\b(?:[a-zA-Z][a-zA-Z0-9-]*\.)+(?:com|net|org|io|dev|local|internal|cloud|app|ai|co|gov|edu|info|tech|us|uk|de|fr|jp|cn|ca|au)\b"#, .host, 0.85),
-
-      // Environment variables
-      (#"\$\{?\w+\}?"#, .envVar, 0.95),
-
-      // Glob patterns (*.swift, **/*.json) — specific patterns first
-      (#"\*\.[a-zA-Z]+|\*\*/[^\s]+"#, .glob, 0.9),
-
-      // File paths with directory (./foo/bar, ~/Documents/x, /usr/bin/y)
-      (#"(?:\.{1,2}|~)?/[^\s]+"#, .filePath, 0.85),
-
-      // Bare directory paths (Sources/, backup/, src/) — no leading ./ or ~/
-      (#"\b[a-zA-Z0-9_][a-zA-Z0-9_.-]*/(?=\s|$)"#, .directoryPath, 0.8),
-
-      // Dotfiles (.DS_Store, .gitignore, .env)
-      (#"(?<=\s|^)\.[a-zA-Z][a-zA-Z0-9_.-]+"#, .fileName, 0.85),
-
-      // Files with extensions (main.swift, config.yaml, package.json)
-      (#"\b[a-zA-Z0-9_-]+\.[a-zA-Z]{1,10}\b"#, .fileName, 0.7),
-
-      // Sizes (100M, 1G, 500K, 2.5GB)
-      (#"\b\d+(?:\.\d+)?[kKmMgGtT][bB]?\b"#, .size, 0.9),
-
-      // Durations (30s, 5m, 2h, 1d)
-      (#"\b\d+[smhd]\b"#, .duration, 0.85),
-
-      // Port numbers (explicit: "port 8080")
-      (#"(?i)port\s+(\d{1,5})"#, .port, 0.9),
-
-      // Standalone port-like numbers after colon (localhost:8080)
-      (#":(\d{1,5})\b"#, .port, 0.8),
-
-      // Git short SHA
-      (#"\b[a-f0-9]{7,12}\b"#, .gitRef, 0.5),  // low confidence, easy to false match
-
-      // Branch-like patterns (feature/auth, fix/crash-123)
-      (#"\b(?:feature|fix|hotfix|release|bugfix)/[a-zA-Z0-9._-]+\b"#, .branchName, 0.85),
-
-      // T2.2: Multi-word proper nouns (My Documents, Program Files,
-      // Application Support). Two or more consecutive Title-Case tokens
-      // form a compound directory path. Treated as .directoryPath so
-      // path-typed slots can consume it.
-      (#"\b(?:[A-Z][a-z]+\s+){1,3}[A-Z][a-z]+\b"#, .directoryPath, 0.75),
-    ]
-
-    for (pattern, entityType, confidence) in rules {
-      guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
-      let nsRange = NSRange(query.startIndex..., in: query)
-      for match in regex.matches(in: query, range: nsRange) {
+    for rule in Self.structuralRules {
+      for match in rule.regex.matches(in: query, range: nsRange) {
         // Use capture group 1 if it exists, otherwise group 0
         let captureIdx = match.numberOfRanges > 1 ? 1 : 0
         guard let range = Range(match.range(at: captureIdx), in: query) else { continue }
@@ -201,17 +141,88 @@ public struct EntityRecognizer: Sendable {
         guard !text.isEmpty, text.count >= 2 else { continue }
 
         // Don't re-classify URLs as filenames
-        if entityType == .fileName && text.contains("://") { continue }
+        if rule.type == .fileName && text.contains("://") { continue }
 
         entities.append(RecognizedEntity(
-          text: text, type: entityType, role: .unknown,
-          confidence: confidence, source: .structural
+          text: text, type: rule.type, role: .unknown,
+          confidence: rule.confidence, source: .structural
         ))
       }
     }
 
     return entities
   }
+
+  /// Compiled structural rule: one NSRegularExpression + metadata.
+  /// Patterns are literal and compile-safe; `try!` is correct here.
+  private struct StructuralRule: Sendable {
+    let regex: NSRegularExpression
+    let type: EntityType
+    let confidence: Float
+  }
+
+  /// Structural recognition rules, compiled once per process.
+  /// Previously rebuilt + recompiled on every `recognize()` call (~10–15ms/query).
+  private static let structuralRules: [StructuralRule] = [
+    // URLs (must come before path detection)
+    StructuralRule(regex: try! NSRegularExpression(pattern: #"https?://[^\s]+"#), type: .url, confidence: 0.95),
+
+    // Email addresses
+    StructuralRule(regex: try! NSRegularExpression(pattern: #"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"#), type: .email, confidence: 0.9),
+
+    // IP addresses
+    StructuralRule(regex: try! NSRegularExpression(pattern: #"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b"#), type: .ipAddress, confidence: 0.9),
+
+    // T1.3: Bare hostnames (example.com, api.github.com, my-server.local).
+    // Must come AFTER URL/email so https://x.com and a@b.com are
+    // captured as their richer types first. Excludes obvious file
+    // patterns (single .ext form) by requiring at least one dot AND
+    // a TLD-like suffix from the curated list, OR multi-label hyphen-
+    // bearing labels which file extensions don't have.
+    StructuralRule(regex: try! NSRegularExpression(pattern: #"\b(?:[a-zA-Z][a-zA-Z0-9-]*\.)+(?:com|net|org|io|dev|local|internal|cloud|app|ai|co|gov|edu|info|tech|us|uk|de|fr|jp|cn|ca|au)\b"#), type: .host, confidence: 0.85),
+
+    // Environment variables
+    StructuralRule(regex: try! NSRegularExpression(pattern: #"\$\{?\w+\}?"#), type: .envVar, confidence: 0.95),
+
+    // Glob patterns (*.swift, **/*.json) — specific patterns first
+    StructuralRule(regex: try! NSRegularExpression(pattern: #"\*\.[a-zA-Z]+|\*\*/[^\s]+"#), type: .glob, confidence: 0.9),
+
+    // File paths with directory (./foo/bar, ~/Documents/x, /usr/bin/y)
+    StructuralRule(regex: try! NSRegularExpression(pattern: #"(?:\.{1,2}|~)?/[^\s]+"#), type: .filePath, confidence: 0.85),
+
+    // Bare directory paths (Sources/, backup/, src/) — no leading ./ or ~/
+    StructuralRule(regex: try! NSRegularExpression(pattern: #"\b[a-zA-Z0-9_][a-zA-Z0-9_.-]*/(?=\s|$)"#), type: .directoryPath, confidence: 0.8),
+
+    // Dotfiles (.DS_Store, .gitignore, .env)
+    StructuralRule(regex: try! NSRegularExpression(pattern: #"(?<=\s|^)\.[a-zA-Z][a-zA-Z0-9_.-]+"#), type: .fileName, confidence: 0.85),
+
+    // Files with extensions (main.swift, config.yaml, package.json)
+    StructuralRule(regex: try! NSRegularExpression(pattern: #"\b[a-zA-Z0-9_-]+\.[a-zA-Z]{1,10}\b"#), type: .fileName, confidence: 0.7),
+
+    // Sizes (100M, 1G, 500K, 2.5GB)
+    StructuralRule(regex: try! NSRegularExpression(pattern: #"\b\d+(?:\.\d+)?[kKmMgGtT][bB]?\b"#), type: .size, confidence: 0.9),
+
+    // Durations (30s, 5m, 2h, 1d)
+    StructuralRule(regex: try! NSRegularExpression(pattern: #"\b\d+[smhd]\b"#), type: .duration, confidence: 0.85),
+
+    // Port numbers (explicit: "port 8080")
+    StructuralRule(regex: try! NSRegularExpression(pattern: #"(?i)port\s+(\d{1,5})"#), type: .port, confidence: 0.9),
+
+    // Standalone port-like numbers after colon (localhost:8080)
+    StructuralRule(regex: try! NSRegularExpression(pattern: #":(\d{1,5})\b"#), type: .port, confidence: 0.8),
+
+    // Git short SHA — low confidence, easy to false match
+    StructuralRule(regex: try! NSRegularExpression(pattern: #"\b[a-f0-9]{7,12}\b"#), type: .gitRef, confidence: 0.5),
+
+    // Branch-like patterns (feature/auth, fix/crash-123)
+    StructuralRule(regex: try! NSRegularExpression(pattern: #"\b(?:feature|fix|hotfix|release|bugfix)/[a-zA-Z0-9._-]+\b"#), type: .branchName, confidence: 0.85),
+
+    // T2.2: Multi-word proper nouns (My Documents, Program Files,
+    // Application Support). Two or more consecutive Title-Case tokens
+    // form a compound directory path. Treated as .directoryPath so
+    // path-typed slots can consume it.
+    StructuralRule(regex: try! NSRegularExpression(pattern: #"\b(?:[A-Z][a-z]+\s+){1,3}[A-Z][a-z]+\b"#), type: .directoryPath, confidence: 0.75),
+  ]
 
   // MARK: - Layer 2: Lexicon Recognition
 
@@ -222,14 +233,18 @@ public struct EntityRecognizer: Sendable {
     let existingTexts = Set(existing.map { $0.text.lowercased() })
     let words = tokenize(query)
 
+    // Hoisted: previously re-lowercased + re-scanned per matching word.
+    let queryLower = query.lowercased()
+    let queryIsGitRelated = Self.gitContextKeywords.contains { queryLower.contains($0) }
+
     for word in words {
       let lower = word.lowercased()
 
       // Skip if already recognized structurally
       if existingTexts.contains(lower) { continue }
 
-      // Check against installed applications
-      if appNames.contains(where: { $0.caseInsensitiveCompare(word) == .orderedSame }) {
+      // Check against installed applications (case-insensitive Set lookup)
+      if appNamesLower.contains(lower) {
         entities.append(RecognizedEntity(
           text: word, type: .applicationName, role: .unknown,
           confidence: 0.85, source: .lexicon
@@ -256,13 +271,9 @@ public struct EntityRecognizer: Sendable {
       }
 
       // Check git branch keywords
-      if ["main", "master", "develop", "staging", "production"].contains(lower) {
+      if Self.gitBranchKeywords.contains(lower) {
         // Only tag as branch if query seems git-related
-        let queryLower = query.lowercased()
-        if queryLower.contains("branch") || queryLower.contains("merge")
-          || queryLower.contains("checkout") || queryLower.contains("switch")
-          || queryLower.contains("rebase") || queryLower.contains("push")
-          || queryLower.contains("pull") {
+        if queryIsGitRelated {
           entities.append(RecognizedEntity(
             text: word, type: .branchName, role: .unknown,
             confidence: 0.7, source: .lexicon
@@ -273,6 +284,12 @@ public struct EntityRecognizer: Sendable {
 
     return entities
   }
+
+  /// Fixed keyword sets for `recognizeLexicon`'s hot loop.
+  private static let gitBranchKeywords: Set<String> =
+    ["main", "master", "develop", "staging", "production"]
+  private static let gitContextKeywords: [String] =
+    ["branch", "merge", "checkout", "switch", "rebase", "push", "pull"]
 
   // MARK: - Layer 3: Preposition Frame Analysis
 
@@ -348,9 +365,9 @@ public struct EntityRecognizer: Sendable {
       let word = String(query[range]).trimmingCharacters(in: .whitespaces)
       guard !word.isEmpty else { return true }
 
-      if tag == .noun && !existingTexts.contains(word.lowercased()) {
-        // Skip meta-nouns (words that describe types, not entities)
-        if !Self.metaNouns.contains(word.lowercased()) {
+      if tag == .noun {
+        let wordLower = word.lowercased()
+        if !existingTexts.contains(wordLower) && !Self.metaNouns.contains(wordLower) {
           nouns.append((word, tag))
         }
       }
@@ -374,7 +391,7 @@ public struct EntityRecognizer: Sendable {
   private func classifyNoun(_ noun: String) -> EntityType {
     // Starts with uppercase, no dots → likely app or proper name
     if noun.first?.isUppercase == true && !noun.contains(".") {
-      if appNames.contains(where: { $0.caseInsensitiveCompare(noun) == .orderedSame }) {
+      if appNamesLower.contains(noun.lowercased()) {
         return .applicationName
       }
       return .string  // Could be an app we don't know about
@@ -386,11 +403,12 @@ public struct EntityRecognizer: Sendable {
       return .fileName
     }
 
-    // Known as a command or process
-    if profile.hasCommand(noun.lowercased()) {
+    // Known as a command or process (lowercased once)
+    let nounLower = noun.lowercased()
+    if profile.hasCommand(nounLower) {
       return .commandName
     }
-    if Self.knownServices.contains(noun.lowercased()) {
+    if Self.knownServices.contains(nounLower) {
       return .processName
     }
 
