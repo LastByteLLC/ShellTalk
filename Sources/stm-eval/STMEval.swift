@@ -606,6 +606,15 @@ let allCases: [(String, [EvalCase])] = [
     EvalCase("files larger than 1 GiB", template: "find_large_files", category: "file_ops", required: ["find", "-size"], "Range: GiB unit"),
   ]),
 
+  // MARK: T2.3 — Time-range slots
+  ("WildTimeRanges", [
+    EvalCase("files modified between Monday and Friday", template: "find_mtime_range", category: "file_ops", required: ["find", "-newermt 'Monday'", "! -newermt 'Friday'"], slots: ["START": "Monday", "END": "Friday"], "Time-range: weekday→weekday"),
+    EvalCase("files modified between yesterday and today", template: "find_mtime_range", category: "file_ops", required: ["find", "-newermt 'yesterday'", "! -newermt 'today'"], slots: ["START": "yesterday", "END": "today"], "Time-range: relative anchors"),
+    EvalCase("files between 2026-01-01 and 2026-04-23", template: "find_mtime_range", category: "file_ops", required: ["find", "-newermt '2026-01-01'", "! -newermt '2026-04-23'"], slots: ["START": "2026-01-01", "END": "2026-04-23"], "Time-range: ISO dates"),
+    EvalCase("commits between Monday and Friday", template: "git_log_date_range", category: "git", required: ["git log", "--since='Monday'", "--until='Friday'"], slots: ["START": "Monday", "END": "Friday"], "Time-range: git weekday→weekday"),
+    EvalCase("commits between yesterday and today", template: "git_log_date_range", category: "git", required: ["git log", "--since='yesterday'", "--until='today'"], slots: ["START": "yesterday", "END": "today"], "Time-range: git relative anchors"),
+  ]),
+
   ("WildShellMetachars", [
     EvalCase("grep 'error|warning' in log.txt", template: "grep_search", category: "text_processing", required: ["grep"], "Metachar: regex pipe"),
     EvalCase("find files with HOME in their name", template: "find_by_name", category: "file_ops", required: ["find"], "Metachar: env-var-looking token"),

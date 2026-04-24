@@ -176,6 +176,30 @@ public enum BuiltInTemplates {
         negativeKeywords: ["larger than", "bigger than", "over", "huge"]
       ),
       CommandTemplate(
+        // T2.3: time-range counterpart to find_size_range.
+        // 'between Monday and Friday', 'from yesterday to today', 'between 2026-01-01 and 2026-04-23'.
+        // Uses BSD/GNU find -newermt which accepts loose date strings.
+        // INTENT TIGHT: every intent contains "between"+pair to minimize
+        // BM25 token spread (F2). Generic "files modified" must not match
+        // here — that's find_by_mtime's territory.
+        id: "find_mtime_range",
+        intents: [
+          "between monday and friday files",
+          "between two dates modified files",
+          "between yesterday and today files",
+          "between iso dates files",
+        ],
+        command: "find {PATH} -type f -newermt '{START}' ! -newermt '{END}'",
+        slots: [
+          "PATH": SlotDefinition(type: .path, defaultValue: "."),
+          "START": SlotDefinition(type: .string, defaultValue: "yesterday",
+            extractPattern: #"(?:between|from)\s+([a-zA-Z0-9-]+(?:\s+[a-zA-Z0-9-]+)?)\s+(?:and|to)\s+[a-zA-Z0-9-]+"#),
+          "END": SlotDefinition(type: .string, defaultValue: "today",
+            extractPattern: #"(?:between|from)\s+[a-zA-Z0-9-]+(?:\s+[a-zA-Z0-9-]+)?\s+(?:and|to)\s+([a-zA-Z0-9-]+(?:\s+[a-zA-Z0-9-]+)?)"#),
+        ],
+        negativeKeywords: ["size", "mb", "gb", "kb", "larger", "smaller", "past", "month", "ago"]
+      ),
+      CommandTemplate(
         id: "cp_file",
         intents: [
           "copy file", "copy files", "duplicate file",
@@ -515,6 +539,27 @@ public enum BuiltInTemplates {
             extractPattern: #"between\s+\S+\s+and\s+(\S+)"#),
         ],
         negativeKeywords: ["tag", "display", "status", "--oneline", "-n"]
+      ),
+      CommandTemplate(
+        // T2.3: time-range counterpart to git_log_range. git log accepts
+        // --since=DATE --until=DATE with loose date strings.
+        // 'commits between yesterday and today', 'commits from monday to friday'.
+        id: "git_log_date_range",
+        intents: [
+          "commits between two dates",
+          "commits between yesterday and today",
+          "commits between monday and friday",
+          "git log between dates",
+          "log commits in date range",
+        ],
+        command: "git log --oneline --since='{START}' --until='{END}'",
+        slots: [
+          "START": SlotDefinition(type: .string, defaultValue: "yesterday",
+            extractPattern: #"(?:between|from)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday|yesterday|today|\d{4}-\d{2}-\d{2})\s+(?:and|to)"#),
+          "END": SlotDefinition(type: .string, defaultValue: "today",
+            extractPattern: #"(?:and|to)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday|yesterday|today|\d{4}-\d{2}-\d{2})\s*$"#),
+        ],
+        negativeKeywords: ["v1", "v2", "v3", "tag", "release", "ref", "most", "recent", "latest"]
       ),
       CommandTemplate(
         id: "git_log_no_merges",

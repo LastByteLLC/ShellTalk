@@ -133,7 +133,13 @@ public enum TemplateRefinements {
       "git_log_since": TemplateOverlay(
         negativeKeywords: [                                              // cand-1 (2026-04-23-wildtests)
           "without", "merges", "on", "origin", "master", "main",
+          "most", "recent", "between",                                   // T2.3 compensation
         ]
+      ),
+      "cal_show": TemplateOverlay(
+        // T2.3 compensation: "files modified in the past month" was hijacked
+        // because "month" → cal_show ("show this month").
+        negativeKeywords: ["files", "modified", "past"]                  // T2.3 (2026-04-23-round-c)
       ),
       "awk_column": TemplateOverlay(
         addIntents: [                                                    // cand-1 (2026-04-23-wildtests)
