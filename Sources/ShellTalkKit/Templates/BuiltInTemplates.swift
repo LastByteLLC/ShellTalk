@@ -964,7 +964,10 @@ public enum BuiltInTemplates {
             extractPattern: #"(?:column|field|col)\s+(\d+)"#),
           // Widened to also catch "the X file" / "X.csv" / "X.tsv" / "X.log"
           // patterns common in "process the csv file"-style queries.
-          "FILE": SlotDefinition(type: .path, defaultValue: "{FILE}",
+          // T1.6: defaultValue empty (was the literal "{FILE}" placeholder
+          // which leaked into output). awk reads stdin when no file is
+          // given — the cleaner UX.
+          "FILE": SlotDefinition(type: .path, defaultValue: "",
             extractPattern: #"(?:from|in|of)\s+(\S+)|the\s+(\S+\.(?:csv|tsv|txt|log|out))|(\S+\.(?:csv|tsv|txt|log|out))"#),
         ]
       ),
