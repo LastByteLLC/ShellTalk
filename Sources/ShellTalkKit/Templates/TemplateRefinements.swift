@@ -174,6 +174,17 @@ public enum TemplateRefinements {
         // (without 'process'/'pid') indicates text search, not process search.
         negativeKeywords: ["error", "warning", "log.txt"]                // T1.2
       ),
+      // T1.7 (2026-04-23-round-b): curl_auth additions consolidated below
+      // with the existing cand-053 curl_auth entry to avoid duplicate keys.
+      "curl_get": TemplateOverlay(
+        addIntents: [                                                    // T1.7
+          // "curl https URL" was too generic — regressed
+          // 'curl -sI https://example.com' (curl_headers) and
+          // 'substitute http with https' (sed_replace).
+          "curl URL with query string parameters",
+          "fetch json endpoint with query params",
+        ]
+      ),
       "npm_install": TemplateOverlay(
         addIntents: [                                                    // cand-9 (2026-04-23-round-a)
           // Specific JS-ecosystem package phrases. Narrow enough to not
@@ -321,7 +332,13 @@ public enum TemplateRefinements {
         discriminators: ["-sI", "-I", "headers"]
       ),
       "curl_auth": TemplateOverlay(
-        negativeKeywords: ["-sI", "-I", "headers"]                       // cand-053
+        // T1.7 + cand-053 consolidated. Auth requires an explicit auth
+        // keyword; non-auth tokens that previously stole queries are
+        // suppressed here.
+        negativeKeywords: [
+          "-sI", "-I", "headers",                                         // cand-053
+          "users", "filter", "active", "endpoint",                       // T1.7
+        ]
       ),
       "openssl_check": TemplateOverlay(
         negativeKeywords: ["-sI", "headers"]                             // cand-053
