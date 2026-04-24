@@ -74,7 +74,9 @@ public enum TemplateRefinements {
         addIntents: [                                                    // cand-1 (2026-04-23-wildtests)
           "first files in folder",
           "first files in this folder",
-        ]
+          "find files in my documents folder",                           // T2.2 specific
+        ],
+        negativeKeywords: ["du", "-sh", "-h"]                            // T2.2 — don't steal du queries
       ),
       "find_by_mtime": TemplateOverlay(
         addIntents: [
@@ -392,7 +394,8 @@ public enum TemplateRefinements {
         discriminators: ["disk", "info", "free"]                         // cand-036
       ),
       "du_disk_usage": TemplateOverlay(
-        negativeKeywords: ["info"]                                       // cand-036
+        negativeKeywords: ["info"],                                      // cand-036
+        discriminators: ["du", "-sh"]                                    // T2.2 — anchor for "du -sh ~/Documents"
       ),
     ],
     notes: nil

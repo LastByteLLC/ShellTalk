@@ -197,4 +197,37 @@ struct EntityRecognizerTests {
     // .yaml is not in the TLD allowlist — should not be a host.
     #expect(!hosts.contains(where: { $0.text == "config.yaml" }))
   }
+
+  // MARK: - Multi-word proper noun chunker (T2.2 round-c)
+
+  @Test("Recognizes 'My Documents' as compound directoryPath")
+  func multiWordProperNoun() {
+    let q = "find files in My Documents"
+    let dirs = recognizer.recognize(q).filter { $0.type == .directoryPath }
+    #expect(dirs.contains(where: { $0.text == "My Documents" }))
+  }
+
+  @Test("Recognizes 3-word proper noun")
+  func threeWordProperNoun() {
+    let q = "list Application Support Files"
+    let dirs = recognizer.recognize(q).filter { $0.type == .directoryPath }
+    #expect(dirs.contains(where: { $0.text.contains("Application") }))
+  }
+
+  @Test("Single-word capitalized token is NOT a multi-word entity")
+  func singleWordNotChunked() {
+    // "Documents" alone (one title-case word) shouldn't match the
+    // multi-word chunker — only structural rules apply.
+    let q = "look at Documents"
+    let dirs = recognizer.recognize(q).filter { $0.type == .directoryPath && $0.text == "Documents" }
+    #expect(dirs.isEmpty)
+  }
+
+  @Test("All-caps tokens not classified as multi-word proper nouns")
+  func allCapsNotChunked() {
+    // ALLCAPS doesn't match the [A-Z][a-z]+ token regex.
+    let q = "find HOME PATH"
+    let dirs = recognizer.recognize(q).filter { $0.type == .directoryPath }
+    #expect(!dirs.contains(where: { $0.text.contains("HOME") }))
+  }
 }

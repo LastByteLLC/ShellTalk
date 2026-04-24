@@ -182,6 +182,12 @@ public struct EntityRecognizer: Sendable {
 
       // Branch-like patterns (feature/auth, fix/crash-123)
       (#"\b(?:feature|fix|hotfix|release|bugfix)/[a-zA-Z0-9._-]+\b"#, .branchName, 0.85),
+
+      // T2.2: Multi-word proper nouns (My Documents, Program Files,
+      // Application Support). Two or more consecutive Title-Case tokens
+      // form a compound directory path. Treated as .directoryPath so
+      // path-typed slots can consume it.
+      (#"\b(?:[A-Z][a-z]+\s+){1,3}[A-Z][a-z]+\b"#, .directoryPath, 0.75),
     ]
 
     for (pattern, entityType, confidence) in rules {
