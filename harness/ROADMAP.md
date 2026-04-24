@@ -71,65 +71,32 @@ Each is a 2-4 candidate sequence with its own design brief. Don't start
 one mid-Tier-1 — they want a dedicated run name (e.g.
 `harness/runs/2026-04-NN-multisource/`).
 
-### T2.1 — Multi-source slot extraction
+### ~~T2.1~~ — Multi-source slot extraction — **SHIPPED `287f12a`**
 
-**Why**: `cp a.txt and b.txt to dest/` and `diff A and B` route correctly
-but only bind one source argument. Common real-world shape.
+`SlotDefinition.multi: Bool` + allMatches extraction + new
+`.commandFlag` slot type (empty entity-fallback) wired into cp_file
+and mv_file. WildMultiSource 0.60 → 0.80 (4/5). Pre-existing FLAGS
+slot bug fixed in passing.
 
-| cand | change |
-|---|---|
-| T2.1a | Add `multi: Bool` to `SlotDefinition` + allMatches regex + join-with-space |
-| T2.1b | Wire `{SOURCES}` into cp_file, mv_file, diff_files, grep_search commands |
-| T2.1c | EvalCases + STMAccuracy gate cases |
+### ~~T2.2~~ — Multi-word proper noun entity — **SHIPPED `0d56d71`**
 
-**Risk**: medium. All-match extraction could over-capture ("x.txt and y.txt and z.txt"). Test every current EvalCase with `SOURCES`-like slots.
+T2.2a only (title-case chunker via regex, emits .directoryPath).
+WildCompoundEntities 0.83 → 1.00. T2.2b (quote-aware tokenizer)
+deferred — chunker alone was sufficient.
 
-### T2.2 — Multi-word proper noun entity
+### ~~T2.3~~ — Time-range slots — **SHIPPED `c30762f`**
 
-**Why**: `find files in My Documents` tokenizes as two words; no
-mechanism reconstructs. Also improves `Program Files`, quoted paths.
+`find_mtime_range` + `git_log_date_range` templates, paired
+START/END slot regex. WildTimeRanges new suite at 0.60 (3/5);
+ISO-date and yesterday/today edge cases fall to existing templates
+but produce semi-valid commands.
 
-| cand | change |
-|---|---|
-| T2.2a | Title-case-sequence chunker in `EntityRecognizer` (emit as `.filePath` with compound text) |
-| T2.2b | Quote-aware tokenizer hook — preserve quoted strings as single entity |
-| T2.2c | EvalCases |
+### ~~T2.4~~ — Structured-data format routing — **SHIPPED `3b26f5c`**
 
-**Risk**: medium-high. The tokenizer change (T2.2b) is the risky one —
-any BM25 corpus perturbation ripples through F2. Consider shipping T2.2a
-alone first and deferring T2.2b.
-
-### T2.3 — Time-range slots
-
-**Why**: `between Monday and Friday`, `from 9am to 5pm`. Parallels
-existing `find_size_range` but for time.
-
-| cand | change |
-|---|---|
-| T2.3a | `.timeRange` slot type + date parser helper |
-| T2.3b | `find_mtime_range`, `git_log_date_range` templates |
-| T2.3c | EvalCases |
-
-**Risk**: low. Date parsing is well-bounded; slot type scheme is proven
-after Cand-002/6/7.
-
-### T2.4 — Structured-data format routing
-
-**Why**: `process the json file` has no routing target today; falls back
-to process-related templates. Parallels `FileExtensionAliases` but for
-data-format verbs.
-
-| cand | change |
-|---|---|
-| T2.4a | `.dataFormat` → `.processor` mapping (csv→awk, json→jq, yaml→yq) |
-| T2.4b | `jq_query` + `yq_query` template additions if missing |
-| T2.4c | EvalCases |
-
-**Risk**: low. `awk_column` already has CSV intents from Cand-1.
-
-**Suggested program order**: T2.3 → T2.4 → T2.1 → T2.2. Time-range has
-the clearest demand, structured data has precedent, multi-source has
-slot-system complexity, proper-noun has tokenizer risk.
+`yq_parse` template added (parallels `jq_parse`). Routing intents
+on jq_parse + yq_parse for "process the X file" patterns.
+WildDataFormats new suite at 1.00 (6/6). `usermod_group` negKw
+compensation for cumulative ripple.
 
 ## Tier 3 — explicit defers (with revisit triggers)
 
