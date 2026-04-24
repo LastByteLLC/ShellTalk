@@ -141,6 +141,22 @@ public enum TemplateRefinements {
         // because "month" → cal_show ("show this month").
         negativeKeywords: ["files", "modified", "past"]                  // T2.3 (2026-04-23-round-c)
       ),
+      "jq_parse": TemplateOverlay(
+        addIntents: [                                                    // T2.4 (2026-04-23-round-c)
+          "process the json file",
+          "process json data",
+          "extract field from json file",
+          "parse json data",
+        ]
+      ),
+      "yq_parse": TemplateOverlay(
+        addIntents: [                                                    // T2.4
+          "process the yaml file",
+          "process yaml data",
+          "extract field from yaml",
+          "parse yaml config",
+        ]
+      ),
       "awk_column": TemplateOverlay(
         addIntents: [                                                    // cand-1 (2026-04-23-wildtests)
           "process csv",
@@ -294,6 +310,12 @@ public enum TemplateRefinements {
       ),
 
       // ───── dev_tools / cloud ───────────────────────────────────────
+      "usermod_group": TemplateOverlay(
+        // T2.4 compensation: 'docker run nginx' was hijacked by
+        // usermod_group via some exact/phrase path. Has no business
+        // matching any docker query.
+        negativeKeywords: ["docker", "run", "container", "image", "nginx"]   // T2.4
+      ),
       "docker_run": TemplateOverlay(
         addIntents: ["docker run IMAGE"],                                // cand-021
         discriminators: ["run"]

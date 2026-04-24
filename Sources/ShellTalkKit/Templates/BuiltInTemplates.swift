@@ -1143,10 +1143,32 @@ public enum BuiltInTemplates {
         slots: [
           "QUERY": SlotDefinition(type: .string, defaultValue: ".",
             extractPattern: #"(?:jq|query|field|extract)\s+['\"]?(\S+)['\"]?"#),
-          "FILE": SlotDefinition(type: .path,
-            extractPattern: #"(?:from|in)\s+(\S+)"#),
+          "FILE": SlotDefinition(type: .path, defaultValue: "",
+            extractPattern: #"(?:from|in)\s+(\S+)|the\s+(\S+\.json)|(\S+\.json)"#),
         ],
         negativeKeywords: ["install", "brew", "package", "add", "dependency"]
+      ),
+      CommandTemplate(
+        // T2.4: yq parses YAML the way jq parses JSON.
+        // Narrow: must be "process the yaml file" / "yq …" / "parse yaml"
+        // -- not generic yaml-mention queries (mv config.yml; find yaml files).
+        id: "yq_parse",
+        intents: [
+          "parse yaml", "yq", "extract from yaml",
+          "query yaml", "yaml field", "read yaml",
+          "pretty print yaml", "format yaml",
+        ],
+        command: "yq '{QUERY}' {FILE}",
+        slots: [
+          "QUERY": SlotDefinition(type: .string, defaultValue: ".",
+            extractPattern: #"(?:yq|query|field|extract)\s+['\"]?(\S+)['\"]?"#),
+          "FILE": SlotDefinition(type: .path, defaultValue: "",
+            extractPattern: #"(?:from|in)\s+(\S+)|the\s+(\S+\.(?:yaml|yml))|(\S+\.(?:yaml|yml))"#),
+        ],
+        negativeKeywords: [
+          "install", "brew", "package", "add", "dependency",
+          "find", "mv", "rename", "show", "replace", "substitute",
+        ]
       ),
       CommandTemplate(
         id: "xargs_pipe",

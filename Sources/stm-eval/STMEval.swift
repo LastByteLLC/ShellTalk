@@ -606,6 +606,16 @@ let allCases: [(String, [EvalCase])] = [
     EvalCase("files larger than 1 GiB", template: "find_large_files", category: "file_ops", required: ["find", "-size"], "Range: GiB unit"),
   ]),
 
+  // MARK: T2.4 — Structured-data routing
+  ("WildDataFormats", [
+    EvalCase("process the json file", template: "jq_parse", category: "text_processing", required: ["jq"], "Format: json → jq"),
+    EvalCase("parse json data", template: "jq_parse", category: "text_processing", required: ["jq"], "Format: parse json"),
+    EvalCase("extract field from sales.json", template: "jq_parse", category: "text_processing", required: ["jq", "sales.json"], slots: ["FILE": "sales.json"], "Format: jq with file"),
+    EvalCase("process the yaml file", template: "yq_parse", category: "text_processing", required: ["yq"], "Format: yaml → yq"),
+    EvalCase("parse yaml config", template: "yq_parse", category: "text_processing", required: ["yq"], "Format: parse yaml"),
+    EvalCase("process the csv file", template: "awk_column", category: "text_processing", required: ["awk"], "Format: csv → awk (preserved Cand-1)"),
+  ]),
+
   // MARK: T2.3 — Time-range slots
   ("WildTimeRanges", [
     EvalCase("files modified between Monday and Friday", template: "find_mtime_range", category: "file_ops", required: ["find", "-newermt 'Monday'", "! -newermt 'Friday'"], slots: ["START": "Monday", "END": "Friday"], "Time-range: weekday→weekday"),
