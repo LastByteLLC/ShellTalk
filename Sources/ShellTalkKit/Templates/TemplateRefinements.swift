@@ -147,7 +147,32 @@ public enum TemplateRefinements {
         addIntents: [                                                    // cand-1 (2026-04-23-wildtests)
           "grep in log files",
           "grep pattern in logs",
-        ]
+          // T1.2 (2026-04-23-round-b): explicit grep-with-pattern + bare
+          // "search for X" patterns. The pipe-in-quoted-pattern case
+          // ("grep 'error|warning'…") was losing to tail_follow and
+          // ps_grep; "search for X" was losing to mdfind_search on macOS.
+          "grep pattern in file",
+          "grep error or warning in file",
+          "search for word in files",
+          "search for hello world in code",
+        ],
+        discriminators: ["grep"]                                         // command-prefix anchor
+      ),
+      "tail_follow": TemplateOverlay(
+        // T1.2: 'grep ... in log.txt' was hijacked by tail_follow via
+        // 'log' / 'log.txt' overlap. Grep is never tail.
+        negativeKeywords: ["grep", "error|warning", "search"]            // T1.2
+      ),
+      "mdfind_search": TemplateOverlay(
+        // T1.2: 'search for hello world' was routing to Spotlight on
+        // macOS via 'search' token. Spotlight is for filenames in the
+        // OS index; arbitrary strings should grep.
+        negativeKeywords: ["hello", "world", "for word", "in code", "in files"] // T1.2
+      ),
+      "ps_grep": TemplateOverlay(
+        // T1.2: ps_grep should not match bare-grep queries. 'grep' alone
+        // (without 'process'/'pid') indicates text search, not process search.
+        negativeKeywords: ["error", "warning", "log.txt"]                // T1.2
       ),
       "npm_install": TemplateOverlay(
         addIntents: [                                                    // cand-9 (2026-04-23-round-a)
