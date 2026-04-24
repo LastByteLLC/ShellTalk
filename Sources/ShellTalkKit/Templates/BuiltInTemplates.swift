@@ -558,11 +558,17 @@ public enum BuiltInTemplates {
         // 'commits between yesterday and today', 'commits from monday to friday'.
         id: "git_log_date_range",
         intents: [
+          // round-c wild-cleanup: stronger intent set for the
+          // 'commits between X and Y' pattern (was losing to git_log_since
+          // on yesterday/today via 'commits since yesterday' intent overlap).
           "commits between two dates",
           "commits between yesterday and today",
+          "commits between yesterday today",
           "commits between monday and friday",
+          "commits between today and tomorrow",
           "git log between dates",
           "log commits in date range",
+          "commits in range from date to date",
         ],
         command: "git log --oneline --since='{START}' --until='{END}'",
         slots: [

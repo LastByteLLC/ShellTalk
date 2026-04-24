@@ -596,7 +596,7 @@ let allCases: [(String, [EvalCase])] = [
     EvalCase("show the top 3 largest files", template: "find_large_files", category: "file_ops", required: ["find"], "Ordinal: top N"),
     EvalCase("first 10 files in this folder", template: "ls_files", category: "file_ops", required: ["ls"], "Ordinal: first N"),
     EvalCase("most recent commit", template: "git_log", category: "git", required: ["git log"], "Ordinal: superlative single"),
-    EvalCase("biggest 5 directories", template: "du_disk_usage", category: "file_ops", required: ["du"], "Ordinal: biggest N dirs"),
+    EvalCase("biggest 5 directories", template: "du_summary", category: "system", required: ["du"], "Ordinal: biggest N dirs (gold corrected — du_summary IS du)"),
   ]),
 
   ("WildRanges", [

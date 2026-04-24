@@ -36,7 +36,7 @@ public enum TemplateRefinements {
         discriminators: ["rename"]                                       // cand-001
       ),
       "cp_file": TemplateOverlay(
-        negativeKeywords: ["rename", "diff"]                             // cand-001, cand-027
+        negativeKeywords: ["rename", "diff", "compare"]                  // cand-001, cand-027 + round-c
       ),
       "rm_file": TemplateOverlay(
         discriminators: ["delete", "remove", "trash", "erase", "old"]    // cand-019
@@ -52,7 +52,10 @@ public enum TemplateRefinements {
         negativeKeywords: ["ln", "-s", "symlink"]                        // cand-006
       ),
       "diff_files": TemplateOverlay(
-        addIntents: ["diff FILE FILE"],                                  // cand-027
+        addIntents: [
+          "diff FILE FILE",                                              // cand-027
+          "compare FILE to FILE",                                        // round-c wild-cleanup
+        ],
         negativeKeywords: ["changes"],                                   // cand-007
         discriminators: ["diff", "compare"]
       ),
@@ -391,6 +394,7 @@ public enum TemplateRefinements {
         negativeKeywords: ["capture", "output"]                          // cand-025
       ),
       "df_disk_free": TemplateOverlay(
+        negativeKeywords: ["most", "using", "biggest"],                  // round-c wild-cleanup
         discriminators: ["disk", "info", "free"]                         // cand-036
       ),
       "du_disk_usage": TemplateOverlay(
