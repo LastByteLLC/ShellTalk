@@ -91,4 +91,38 @@ struct STMPipelineTests {
     #expect(result != nil)
     #expect(result?.command.contains("git log") == true)
   }
+
+  // MARK: - Conversational filter (round-c optimization)
+
+  @Test("Conversational query 'tell me about X' returns nil")
+  func conversationalTellMeAbout() {
+    let pipeline = STMPipeline()
+    #expect(pipeline.process("tell me about kubernetes") == nil)
+    #expect(pipeline.process("tell me about docker containers") == nil)
+  }
+
+  @Test("Conversational 'what is the difference' returns nil")
+  func conversationalWhatIsDifference() {
+    let pipeline = STMPipeline()
+    #expect(pipeline.process("what is the difference between sed and awk") == nil)
+    #expect(pipeline.process("what's the difference between cp and mv") == nil)
+  }
+
+  @Test("Action verb queries are NOT filtered")
+  func actionVerbsPassThrough() {
+    let pipeline = STMPipeline()
+    // 'show git status' is an action, not a meta-question
+    #expect(pipeline.process("show git status") != nil)
+    // 'explain the find command' is asking for help — should route to man/help
+    #expect(pipeline.process("explain the find command") != nil)
+  }
+
+  @Test("Static isConversational helper")
+  func conversationalHelper() {
+    #expect(STMPipeline.isConversational("tell me about kubernetes"))
+    #expect(STMPipeline.isConversational("what is the difference between sed and awk"))
+    #expect(!STMPipeline.isConversational("git status"))
+    #expect(!STMPipeline.isConversational("show me the files"))
+    #expect(!STMPipeline.isConversational("explain the find command"))
+  }
 }

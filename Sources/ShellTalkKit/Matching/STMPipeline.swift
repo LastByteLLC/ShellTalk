@@ -127,6 +127,14 @@ public final class STMPipeline: Sendable {
     let pipelineStart = PipelineTimer.now()
     var timings: [StageTiming] = []
 
+    // Conversational filter: queries that are clearly meta-questions or
+    // tutorial requests have no shell-command answer and should return
+    // nil rather than match-anything. Improves Unknown-suite accuracy
+    // and prevents wrong commands from running on chat-style input.
+    if Self.isConversational(query) {
+      return nil
+    }
+
     // Step 0: Recognize entities
     var t0 = PipelineTimer.now()
     let entities = recognizer.recognize(query)
@@ -266,6 +274,34 @@ public final class STMPipeline: Sendable {
     }
 
     return resolved
+  }
+
+  /// Detect conversational/meta queries that have no shell-command answer.
+  /// Examples: "tell me about kubernetes", "explain how to use grep",
+  /// "what is the difference between sed and awk".
+  /// Returns true if the query starts with a conversational prefix AND
+  /// is followed by enough words to be a real question (>= 3 words total).
+  static func isConversational(_ query: String) -> Bool {
+    let lower = query.lowercased().trimmingCharacters(in: .whitespaces)
+    // Narrow set: only true meta-questions that have NO command answer.
+    // 'explain the find command' / 'how do I use grep' are intentionally
+    // NOT here — those legitimately route to man/help.
+    let conversationalPrefixes: [String] = [
+      "tell me about ",
+      "tell me what is ",
+      "what is the difference between ",
+      "what's the difference between ",
+      "why does ",
+      "why is ",
+    ]
+    for prefix in conversationalPrefixes {
+      if lower.hasPrefix(prefix) {
+        // Require at least 1 token after the prefix (sanity)
+        let rest = String(lower.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
+        if !rest.isEmpty { return true }
+      }
+    }
+    return false
   }
 }
 
