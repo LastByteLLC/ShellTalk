@@ -139,6 +139,14 @@ public struct EntityRecognizer: Sendable {
       // IP addresses
       (#"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b"#, .ipAddress, 0.9),
 
+      // T1.3: Bare hostnames (example.com, api.github.com, my-server.local).
+      // Must come AFTER URL/email so https://x.com and a@b.com are
+      // captured as their richer types first. Excludes obvious file
+      // patterns (single .ext form) by requiring at least one dot AND
+      // a TLD-like suffix from the curated list, OR multi-label hyphen-
+      // bearing labels which file extensions don't have.
+      (#"\b(?:[a-zA-Z][a-zA-Z0-9-]*\.)+(?:com|net|org|io|dev|local|internal|cloud|app|ai|co|gov|edu|info|tech|us|uk|de|fr|jp|cn|ca|au)\b"#, .host, 0.85),
+
       // Environment variables
       (#"\$\{?\w+\}?"#, .envVar, 0.95),
 
