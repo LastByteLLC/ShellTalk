@@ -52,7 +52,7 @@ and familiarity with the harness loop.
 | ~~T1.1~~ | ~~Named-weekday date math (`since Monday`, `2 weeks ago` routing)~~ | C+B | ~70 | low | **Shipped `8aff863`** — WildTime 0.56 → 1.00 |
 | ~~T1.2~~ | ~~`grep_search` wins on quoted-regex queries~~ | B | ~26 | low | **Shipped `18fed01`** — WildShellMetachars 0.33 → 1.00 |
 | T1.3 | `.host` entity for bare domains (formalize) | D-small | ~20 | low | cleanup; no metric move |
-| T1.4 | Healing: common long→short flag corrections | D-small | ~50 | medium | healing coverage; no metric move (CommandHealerTests only) |
+| ~~T1.4~~ | ~~Healing: common long→short flag corrections~~ | D-small | ~150 | low | **Shipped `93faa7e`** — 30+ GNU long→BSD short mappings, 4 new tests |
 | ~~T1.5~~ | ~~`git_commit_push` + `build_and_test` compound templates~~ | A | ~40 | low | **Shipped `ecccc2d`** — Chained 0.67 → 1.00 |
 | ~~T1.6~~ | ~~`awk_column` FILE slot: no-filename case emits `stdin` not `{FILE}`~~ | C | ~5 | low | **Shipped `ae6bb34`** — UX cleanup, no metric move |
 | ~~T1.7~~ | ~~`.url` with query-string + fragment preservation~~ | B | ~19 | low | **Shipped `345385b`** — WildCompoundEntities 0.67 → 0.83 |
