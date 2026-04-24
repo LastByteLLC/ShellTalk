@@ -121,7 +121,7 @@ ShellTalk is fully deterministic. Same query, same machine, same result.
 Query
   -> Entity Recognition (regex, lexicon, preposition frames, NLTagger POS)
   -> BM25 Category Match (12 categories)
-  -> BM25 + TF-IDF Template Match (235 templates, NLEmbedding rerank on macOS)
+  -> BM25 + TF-IDF Template Match (255 templates, NLEmbedding rerank on macOS)
   -> Slot Extraction (entity-aware + regex)
   -> Platform Resolution (BSD/GNU, macOS/Linux)
   -> Validation (bash -n, command existence, safety check)
@@ -157,10 +157,10 @@ Query
 
 | Category | Templates | Examples |
 | ---------- | ----------- | --------- |
-| File Operations | 24 | find, ls, cp, mv, rm, mkdir, du, chmod |
-| Git | 29 | status, diff, log, commit, branch, merge, stash, blame |
-| Text Processing | 16 | grep, sed, awk, sort, uniq, wc, head, tail, jq |
-| Dev Tools | 24 | swift, cargo, go, node, python, docker, kubectl |
+| File Operations | 26 | find, ls, cp, mv, rm, mkdir, du, chmod |
+| Git | 33 | status, diff, log, commit, branch, merge, stash, blame, range |
+| Text Processing | 17 | grep, sed, awk, sort, uniq, wc, head, tail, jq, yq |
+| Dev Tools | 25 | swift, cargo, go, node, python, docker, kubectl |
 | macOS | 16 | open, pbcopy, say, defaults, mdfind, sips, screencapture |
 | Network | 12 | curl, ssh, scp, dig, ping |
 | System | 38 | ps, kill, df, env, which, uptime |
@@ -185,16 +185,16 @@ Matching quality is improved by an agentic proposer loop — one Claude instance
 
 Each candidate is a branch + artifact dir containing an `overlay.yaml`, `metrics.json`, and `traces/eval.jsonl`. Overlays (see `harness/overlay-schema.md`) tweak matcher thresholds, per-template `discriminators`, `negativeKeywords`, or `addIntents` without touching source. Source edits are allowed only on candidate branches.
 
-Candidates are scored by `stm-eval` against 380 curated `EvalCase`s and gated by `swift test --filter STMAccuracy` — zero-regression, no exceptions. Validated refinements graduate into `Sources/ShellTalkKit/Templates/TemplateRefinements.swift`.
+Candidates are scored by `stm-eval` against 454 curated `EvalCase`s and gated by `swift test --filter STMAccuracy` — zero-regression, no exceptions. Validated refinements graduate into `Sources/ShellTalkKit/Templates/TemplateRefinements.swift`.
 
-Current shipped frontier (see `harness/frontier.md`):
+Current shipped frontier (see `harness/frontier.md` for the full timeline):
 
-| state            | tpl_acc | cat_acc | BM25 lane | p95_ms |
-| ---------------- | ------: | ------: | --------: | -----: |
-| shipped (main)   |  0.9500 |  0.9763 |     0.850 |    319 |
-| original baseline |  0.8947 |  0.9421 |     0.687 |   1038 |
+| state            | n   | tpl_acc | cat_acc | BM25 lane | p95_ms |
+| ---------------- | ---:| ------: | ------: | --------: | -----: |
+| shipped (main)   | 454 |  0.9736 |  0.9890 |     0.908 |    359 |
+| original baseline | 380 |  0.8947 |  0.9421 |     0.687 |   1038 |
 
-Net: **+5.53pp tpl_acc**, **+3.42pp cat_acc**, **+16.3pp** on the BM25 ranking lane, with determinism restored (F1 in `harness/FINDINGS.md`). `harness/runs/` is gitignored — only the shipped state lives in source and `frontier.md`.
+Net across all rounds: **+7.89pp tpl_acc**, **+4.69pp cat_acc**, **+22.1pp** on the BM25 ranking lane. Eval set grew 380 → 454 cases (+74 from audit additions). Determinism restored (F1 in `harness/FINDINGS.md`). `harness/runs/` is gitignored — only the shipped state lives in source and `frontier.md` / `ROADMAP.md`.
 
 ```bash
 # Evaluate an overlay candidate
