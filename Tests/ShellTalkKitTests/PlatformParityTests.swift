@@ -18,7 +18,16 @@
 import Testing
 @testable import ShellTalkKit
 
-@Suite("PlatformParity")
+// `.serialized` avoids a known Swift Testing flake on macOS runners
+// where a parameterized suite sharing static state (here, a single
+// STMPipeline instance) can SIGSEGV the parallel test helper. The
+// crash reproduces with the "Class _TtC7Testing10Serializer is
+// implemented in both ..." objc warning — Xcode 26 ships its own
+// Testing framework and the Swift 6.3 toolchain ships another, and
+// the parallel runner occasionally dispatches through the wrong one.
+// Running this small suite serially is harmless (< 50 ms total) and
+// dodges the framework collision entirely.
+@Suite("PlatformParity", .serialized)
 struct PlatformParityTests {
 
   /// Gold-standard query → template mappings that must hold on every
@@ -52,12 +61,16 @@ struct PlatformParityTests {
     ("tell me about kubernetes", "_nil_"),
   ]
 
-  private static let pipeline = STMPipeline()
+  // Instance-level (not static) — Swift Testing creates a new struct
+  // instance per test method invocation, so each parameterized case
+  // gets a fresh pipeline. Avoids any shared-state races in parallel.
+  // (Paired with `.serialized` above, this is belt-and-braces.)
+  private let pipeline = STMPipeline()
 
   @Test("Gold queries route identically on all platforms",
         arguments: goldQueries)
   func goldRouting(tc: (query: String, expected: String)) {
-    let result = Self.pipeline.process(tc.query)
+    let result = pipeline.process(tc.query)
     if tc.expected == "_nil_" {
       let accepted = result == nil || (result?.confidence ?? 1) < 0.3
       #expect(
