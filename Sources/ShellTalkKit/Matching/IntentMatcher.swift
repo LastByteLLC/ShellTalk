@@ -60,6 +60,8 @@ public final class IntentMatcher: Sendable {
   private let store: TemplateStore
   private let embedding: any EmbeddingProvider
   private let config: MatcherConfig
+  /// Profile used to evaluate template `requires` predicates. nil → no demotion.
+  private let profile: SystemProfile?
 
   /// All meaningful tokens from template intents + command names.
   /// Used as the correction dictionary for typo tolerance.
@@ -80,10 +82,12 @@ public final class IntentMatcher: Sendable {
   public init(
     store: TemplateStore,
     embedding: (any EmbeddingProvider)? = nil,
-    config: MatcherConfig = .default
+    config: MatcherConfig = .default,
+    profile: SystemProfile? = nil
   ) {
     self.store = store
     self.config = config
+    self.profile = profile
     self.embedding = embedding ?? makeEmbeddingProvider()
 
     // Build anchor word dictionary for typo correction.
@@ -724,6 +728,12 @@ public final class IntentMatcher: Sendable {
     // Apply negative keyword penalties
     candidates = applyNegativeKeywordPenalties(candidates: candidates, query: query)
 
+    // Apply capability-requirement demotion: templates whose `requires`
+    // predicates are unmet on this profile get a hard score haircut so
+    // they sink below environment-compatible alternatives, but stay
+    // visible in `--alternatives` / `--debug` output.
+    candidates = applyRequiresDemotion(candidates: candidates)
+
     // Optional: Rerank BM25 candidates with embeddings (lazy — only embed candidates)
     if config.useEmbeddings, let queryVec = cachedQueryEmbedding(query) {
       candidates = rerankWithEmbeddings(candidates: candidates, queryVector: queryVec)
@@ -770,6 +780,33 @@ public final class IntentMatcher: Sendable {
       embeddingScore: nil,
       template: template
     )
+  }
+
+  // MARK: - Capability-Requirement Demotion
+
+  /// Demote candidates whose `requires` predicates are unsatisfied on the
+  /// current SystemProfile. Soft (multiplier) rather than hard exclusion so
+  /// that --alternatives/--debug still surface them. Templates without
+  /// `requires`, and the no-profile case (tests that pass nil), pass through
+  /// unchanged.
+  private func applyRequiresDemotion(
+    candidates: [(category: String, categoryScore: Double, template: BM25Result)]
+  ) -> [(category: String, categoryScore: Double, template: BM25Result)] {
+    guard let profile = self.profile else { return candidates }
+    return candidates.map { candidate in
+      guard let template = store.template(byId: candidate.template.documentId),
+            let requires = template.requires, !requires.isEmpty
+      else { return candidate }
+      let satisfied = requires.allSatisfy { profile.satisfies($0) }
+      if satisfied { return candidate }
+      // 0.4 multiplier: a sibling variant that does satisfy can dominate
+      // even when the unsatisfied template scores ~2x higher on tokens alone.
+      let demoted = BM25Result(
+        documentId: candidate.template.documentId,
+        score: candidate.template.score * 0.4
+      )
+      return (candidate.category, candidate.categoryScore, demoted)
+    }
   }
 
   // MARK: - Negative Keyword Penalties

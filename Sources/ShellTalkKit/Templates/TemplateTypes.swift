@@ -35,6 +35,10 @@ public struct CommandTemplate: Sendable, Codable {
   /// Tokens that MUST be present for this template to win command-prefix matching.
   /// Templates without discriminators are the "default" for their command prefix.
   public let discriminators: [String]?
+  /// Capability predicates (see `SystemProfile.satisfies`) that must hold for the
+  /// template to be a high-confidence pick. Unsatisfied requirements *demote*
+  /// (not exclude) the template, so debug/alternatives still surface it.
+  public let requires: [String]?
 
   public init(
     id: String,
@@ -45,7 +49,8 @@ public struct CommandTemplate: Sendable, Codable {
     flags: [FlagDefinition]? = nil,
     tags: [String]? = nil,
     negativeKeywords: [String]? = nil,
-    discriminators: [String]? = nil
+    discriminators: [String]? = nil,
+    requires: [String]? = nil
   ) {
     self.id = id
     self.intents = intents
@@ -56,6 +61,7 @@ public struct CommandTemplate: Sendable, Codable {
     self.tags = tags
     self.negativeKeywords = negativeKeywords
     self.discriminators = discriminators
+    self.requires = requires
   }
 }
 

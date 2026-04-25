@@ -248,6 +248,62 @@ public let allCases: [(String, [EvalCase])] = [
     EvalCase("test connectivity to api.example.com", template: "ping_host", category: "network", required: ["ping", "-c"], "Natural"),
   ]),
 
+  ("CurlAdvanced", [
+    // PUT/PATCH/DELETE
+    EvalCase("send PUT request to https://api.example.com/users/1", template: "curl_put", category: "network", required: ["curl", "-X PUT"], "Direct: PUT"),
+    EvalCase("update resource via PUT https://api.example.com/users/2", template: "curl_put", category: "network", required: ["curl", "-X PUT"], "Natural: update PUT"),
+    EvalCase("send PATCH request to https://api.example.com/users/3", template: "curl_patch", category: "network", required: ["curl", "-X PATCH"], "Direct: PATCH"),
+    EvalCase("partial update via PATCH https://api.example.com/users/4", template: "curl_patch", category: "network", required: ["curl", "-X PATCH"], "Natural: PATCH partial"),
+    EvalCase("send DELETE request to https://api.example.com/users/5", template: "curl_delete", category: "network", required: ["curl", "-X DELETE"], "Direct: DELETE"),
+    EvalCase("delete resource via curl at https://api.example.com/users/6", template: "curl_delete", category: "network", required: ["curl", "-X DELETE"], "Natural: DELETE resource"),
+    // Redirects
+    EvalCase("curl follow redirects on https://example.com/redirect", template: "curl_follow_redirects", category: "network", required: ["curl", "-sL"], "Direct: follow"),
+    EvalCase("fetch https://example.com following 30x redirects", template: "curl_follow_redirects", category: "network", required: ["curl", "-sL"], "Natural: follow 30x"),
+    // Basic auth
+    EvalCase("curl with basic auth user:pass to https://api.example.com/me", template: "curl_basic_auth", category: "network", required: ["curl", "-u"], "Direct: basic auth"),
+    EvalCase("authenticate via basic auth on https://example.com/private", template: "curl_basic_auth", category: "network", required: ["curl", "-u"], "Natural: basic auth"),
+    // File upload form
+    EvalCase("curl upload file report.pdf to https://api.example.com/upload", template: "curl_form_upload", category: "network", required: ["curl", "-F"], "Direct: form upload"),
+    EvalCase("multipart form upload of image.jpg to https://example.com/post", template: "curl_form_upload", category: "network", required: ["curl", "-F"], "Natural: multipart"),
+    // Download with progress
+    EvalCase("curl download with progress bar https://example.com/file.tar.gz", template: "curl_download_progress", category: "network", required: ["curl", "--progress-bar"], "Direct: progress"),
+    EvalCase("download file with progress meter https://example.com/big.iso", template: "curl_download_progress", category: "network", required: ["curl", "--progress-bar"], "Natural: progress meter"),
+    // Resume
+    EvalCase("curl resume download https://example.com/big.iso", template: "curl_resume", category: "network", required: ["curl", "-C -"], "Direct: resume"),
+    EvalCase("continue interrupted download from https://example.com/large.zip", template: "curl_resume", category: "network", required: ["curl", "-C -"], "Natural: continue interrupted"),
+    // mTLS
+    EvalCase("curl with client certificate to https://mtls.example.com", template: "curl_mtls", category: "network", required: ["curl", "--cert"], "Direct: mtls"),
+    EvalCase("mtls request to https://api.example.com using client cert", template: "curl_mtls", category: "network", required: ["curl", "--cert"], "Natural: mtls"),
+    // Cookies
+    EvalCase("curl with cookies from cookies.txt for https://example.com", template: "curl_cookies", category: "network", required: ["curl", "-b"], "Direct: cookies"),
+    EvalCase("include cookies in request to https://example.com/auth", template: "curl_cookies", category: "network", required: ["curl", "-b"], "Natural: include cookies"),
+    // User agent
+    EvalCase("curl with custom user agent to https://example.com", template: "curl_user_agent", category: "network", required: ["curl", "-A"], "Direct: UA"),
+    EvalCase("set user agent string for https://example.com", template: "curl_user_agent", category: "network", required: ["curl", "-A"], "Natural: UA string"),
+    // Timing
+    EvalCase("curl timing breakdown for https://example.com", template: "curl_timing", category: "network", required: ["curl", "-w"], "Direct: timing"),
+    EvalCase("show curl request timing details for https://example.com", template: "curl_timing", category: "network", required: ["curl", "-w"], "Natural: timing detail"),
+    // Save headers separately
+    EvalCase("curl save response headers to headers.txt for https://example.com", template: "curl_save_headers", category: "network", required: ["curl", "-D"], "Direct: save headers"),
+    // HEAD method
+    EvalCase("curl HEAD request to https://example.com", template: "curl_head_method", category: "network", required: ["curl", "-X HEAD"], "Direct: HEAD"),
+    // Max time / timeout
+    EvalCase("curl with max time 10 seconds for https://example.com", template: "curl_max_time", category: "network", required: ["curl", "--max-time"], "Direct: timeout"),
+    EvalCase("limit curl request duration to 5 seconds for https://example.com", template: "curl_max_time", category: "network", required: ["curl", "--max-time"], "Natural: limit duration"),
+    // ipv4 / ipv6
+    EvalCase("curl ipv4 only for https://example.com", template: "curl_ipv4", category: "network", required: ["curl", "-4"], "Direct: ipv4"),
+    EvalCase("curl ipv6 only for https://example.com", template: "curl_ipv6", category: "network", required: ["curl", "-6"], "Direct: ipv6"),
+    // Verbose
+    EvalCase("curl verbose for https://example.com debug", template: "curl_verbose", category: "network", required: ["curl", "-v"], "Direct: verbose"),
+    EvalCase("show curl request and response details https://example.com", template: "curl_verbose", category: "network", required: ["curl", "-v"], "Natural: verbose detail"),
+    // Status only
+    EvalCase("curl get status code only for https://example.com", template: "curl_status_only", category: "network", required: ["curl", "%{http_code}"], "Direct: status only"),
+    EvalCase("get http status with curl for https://example.com", template: "curl_status_only", category: "network", required: ["curl", "%{http_code}"], "Natural: http status"),
+    // POST form-encoded
+    EvalCase("curl post form data to https://example.com/login", template: "curl_post_form", category: "network", required: ["curl", "-X POST", "-d"], "Direct: form post"),
+    EvalCase("post application/x-www-form-urlencoded fields to https://example.com/api", template: "curl_post_form", category: "network", required: ["curl", "-X POST", "-d"], "Natural: form fields"),
+  ]),
+
   ("System", [
     EvalCase("ps", template: "ps_list", category: "system", required: ["ps aux"], "Terse"),
     EvalCase("show all running processes", template: "ps_list", category: "system", required: ["ps aux"], "Natural"),
@@ -303,6 +359,48 @@ public let allCases: [(String, [EvalCase])] = [
     EvalCase("zstd compress database.sql", template: "zstd_compress", category: "compression", required: ["zstd"], "Direct"),
   ]),
 
+  ("TarAdvanced", [
+    // tar.xz / tar.zst — modern compression formats
+    EvalCase("create tar.xz archive of project/", template: "tar_create_xz", category: "compression", required: ["tar", "-cJf"], "Direct: tar.xz"),
+    EvalCase("make a tar.xz of dist as release.tar.xz", template: "tar_create_xz", category: "compression", required: ["tar", "-cJf"], "Direct: named tar.xz"),
+    EvalCase("create tar.zst archive of build/", template: "tar_create_zst", category: "compression", required: ["tar", "-cf"], "Direct: tar.zst"),
+    EvalCase("compress build directory with zstandard tar", template: "tar_create_zst", category: "compression", required: ["tar", "-cf"], "Natural: zstandard"),
+    EvalCase("extract release.tar.xz", template: "tar_extract_xz", category: "compression", required: ["tar", "-xJf"], "Direct: extract xz"),
+    EvalCase("untar payload.tar.xz", template: "tar_extract_xz", category: "compression", required: ["tar", "-xJf"], "Synonym: untar xz"),
+    EvalCase("extract bundle.tar.zst", template: "tar_extract_zst", category: "compression", required: ["tar", "-xf"], "Direct: extract zst"),
+    EvalCase("decompress source.tar.zst", template: "tar_extract_zst", category: "compression", required: ["tar", "-xf"], "Synonym: decompress zst"),
+    // -C dest dir
+    EvalCase("extract archive.tar.gz into /tmp/build directory", template: "tar_extract_to_dir", category: "compression", required: ["tar", "-xzf", "-C"], "Direct: into dir"),
+    EvalCase("untar source.tar.gz into ./vendor output directory", template: "tar_extract_to_dir", category: "compression", required: ["tar", "-xzf", "-C"], "Natural: into output dir"),
+    // strip-components
+    EvalCase("extract source.tar.gz strip 1 component", template: "tar_extract_strip", category: "compression", required: ["tar", "--strip-components"], slots: ["N": "1"], "Direct: strip 1"),
+    EvalCase("untar release.tar.gz removing top folder", template: "tar_extract_strip", category: "compression", required: ["tar", "--strip-components"], "Natural: remove top"),
+    // verbose listing
+    EvalCase("verbose list of archive.tar.gz", template: "tar_list_verbose", category: "compression", required: ["tar", "-tvzf"], "Direct: verbose list"),
+    EvalCase("show tar contents with sizes for backup.tar.gz", template: "tar_list_verbose", category: "compression", required: ["tar", "-tvzf"], "Natural: with sizes"),
+    // append
+    EvalCase("append notes.txt to archive.tar", template: "tar_append", category: "compression", required: ["tar", "-rf"], "Direct: append"),
+    EvalCase("add config.yaml to existing.tar", template: "tar_append", category: "compression", required: ["tar", "-rf"], "Synonym: add to"),
+    // exclude
+    EvalCase("compress src/ excluding node_modules", template: "tar_exclude", category: "compression", required: ["tar", "-czf", "--exclude"], "Direct: exclude"),
+    EvalCase("create tar of repo but skip .git", template: "tar_exclude", category: "compression", required: ["tar", "--exclude"], "Synonym: skip"),
+    // single-file
+    EvalCase("extract single file README.md from archive.tar.gz", template: "tar_extract_single", category: "compression", required: ["tar", "-xzf"], "Direct: single file"),
+    EvalCase("extract specific file config.yaml from bundle.tar.gz", template: "tar_extract_single", category: "compression", required: ["tar", "-xzf"], "Natural: specific file"),
+    // compare
+    EvalCase("compare backup.tar.gz against ./current", template: "tar_compare", category: "compression", required: ["tar", "-dzf"], "Direct: compare"),
+    EvalCase("verify archive.tar.gz matches src", template: "tar_compare", category: "compression", required: ["tar", "-dzf"], "Synonym: verify matches"),
+    // preserve perms
+    EvalCase("create tar preserving permissions of /etc", template: "tar_preserve_perms", category: "compression", required: ["tar", "-cpzf"], "Direct: preserve perms"),
+    EvalCase("archive with original permissions of bin", template: "tar_preserve_perms", category: "compression", required: ["tar", "-cpzf"], "Natural: original perms"),
+    // dereference symlinks
+    EvalCase("create tar following symlinks of bin/", template: "tar_dereference", category: "compression", required: ["tar", "-czhf"], "Direct: follow symlinks"),
+    EvalCase("tar with dereference of links", template: "tar_dereference", category: "compression", required: ["tar", "-czhf"], "Synonym: dereference"),
+    // plain uncompressed
+    EvalCase("create plain tar archive of docs", template: "tar_create_no_compress", category: "compression", required: ["tar", "-cf"], "Direct: plain tar"),
+    EvalCase("make uncompressed tar of src", template: "tar_create_no_compress", category: "compression", required: ["tar", "-cf"], "Synonym: uncompressed"),
+  ]),
+
   ("Cloud", [
     EvalCase("aws s3 ls", template: "aws_s3_ls", category: "cloud", required: ["aws s3 ls"], "Terse"),
     EvalCase("list objects in s3 bucket", template: "aws_s3_ls", category: "cloud", required: ["aws s3 ls"], "Natural"),
@@ -354,9 +452,115 @@ public let allCases: [(String, [EvalCase])] = [
     EvalCase("trim video clip.mp4", template: "ffmpeg_trim", category: "media", required: ["ffmpeg", "-i"], "Direct"),
     EvalCase("convert video to gif", template: "ffmpeg_gif", category: "media", required: ["ffmpeg", "-i"], "Direct"),
     EvalCase("video info for clip.mp4", template: "ffmpeg_info", category: "media", required: ["ffprobe"], "Direct"),
-    EvalCase("convert image photo.png to photo.jpg", template: "magick_convert", category: "media", required: ["magick"], "Direct"),
-    EvalCase("resize image photo.jpg", template: "magick_resize", category: "media", required: ["magick"], "Direct"),
-    EvalCase("identify photo.jpg", template: "magick_identify", category: "media", required: ["magick identify"], "Terse"),
+    EvalCase("convert image photo.png to photo.jpg", template: "magick_convert", category: "media", required: [], "Direct"),
+    EvalCase("resize image photo.jpg", template: "magick_resize", category: "media", required: ["-resize"], "Direct"),
+    EvalCase("identify photo.jpg", template: "magick_identify", category: "media", required: ["identify"], "Terse"),
+  ]),
+
+  ("OpensslCrypto", [
+    EvalCase("generate password 32 chars", template: "random_password", category: "crypto", required: ["openssl rand", "-base64"], "Direct: random pwd"),
+    EvalCase("openssl s_client connect to api.example.com handshake", template: "openssl_check", category: "crypto", required: ["s_client"], "Direct: handshake"),
+    EvalCase("view certificate details for cert.pem", template: "openssl_x509_text", category: "crypto", required: ["x509", "-text"], "Direct: x509 text"),
+    EvalCase("decode pem certificate cert.pem", template: "openssl_x509_text", category: "crypto", required: ["x509", "-text"], "Synonym: decode pem"),
+    EvalCase("show certificate validity dates of cert.pem", template: "openssl_x509_dates", category: "crypto", required: ["-dates"], "Direct: dates"),
+    EvalCase("when does cert.pem expire show notBefore notAfter", template: "openssl_x509_dates", category: "crypto", required: ["-dates"], "Natural: expire"),
+    EvalCase("show certificate subject of cert.pem", template: "openssl_x509_subject", category: "crypto", required: ["-subject"], "Direct: subject"),
+    EvalCase("show certificate issuer of cert.pem", template: "openssl_x509_issuer", category: "crypto", required: ["-issuer"], "Direct: issuer"),
+    EvalCase("show sha256 fingerprint of cert.pem", template: "openssl_x509_fingerprint", category: "crypto", required: ["-fingerprint"], "Direct: fingerprint"),
+    EvalCase("verify certificate chain cert.pem against ca.pem", template: "openssl_verify_chain", category: "crypto", required: ["verify", "-CAfile"], "Direct: verify chain"),
+    EvalCase("generate rsa private key 4096 bits to private.key", template: "openssl_genrsa", category: "crypto", required: ["genrsa"], "Direct: genrsa"),
+    EvalCase("generate ec private key prime256v1 to ec.key", template: "openssl_genec", category: "crypto", required: ["ecparam"], "Direct: ec key"),
+    EvalCase("generate ed25519 private key to ed25519.key", template: "openssl_gened25519", category: "crypto", required: ["genpkey", "ed25519"], "Direct: ed25519"),
+    EvalCase("extract public key from private.key to public.pem", template: "openssl_pubkey", category: "crypto", required: ["pkey", "-pubout"], "Direct: pubkey"),
+    EvalCase("create CSR signing request from private.key with subject /CN=example.com", template: "openssl_csr_new", category: "crypto", required: ["req", "-new"], "Direct: csr new"),
+    EvalCase("view csr details of request.csr", template: "openssl_csr_view", category: "crypto", required: ["req", "-text"], "Direct: csr view"),
+    EvalCase("create self-signed certificate cert.pem 365 days subject /CN=example.com", template: "openssl_self_signed", category: "crypto", required: ["req", "-x509"], "Direct: self-signed"),
+    EvalCase("export pkcs12 bundle as bundle.p12 from cert.pem and private.key", template: "openssl_p12_export", category: "crypto", required: ["pkcs12", "-export"], "Direct: p12 export"),
+    EvalCase("extract cert and key from bundle.p12 to out.pem", template: "openssl_p12_import", category: "crypto", required: ["pkcs12", "-in"], "Direct: p12 import"),
+    EvalCase("convert pem certificate cert.pem to der cert.der", template: "openssl_pem_to_der", category: "crypto", required: ["outform DER"], "Direct: pem to der"),
+    EvalCase("convert der certificate cert.der to pem cert.pem", template: "openssl_der_to_pem", category: "crypto", required: ["inform DER"], "Direct: der to pem"),
+    EvalCase("convert key private.key to pkcs8 format key.p8", template: "openssl_pkcs8", category: "crypto", required: ["pkcs8", "-topk8"], "Direct: pkcs8"),
+    EvalCase("compute sha256 hash with openssl of file.bin", template: "openssl_sha256", category: "crypto", required: ["dgst", "-sha256"], "Direct: sha256"),
+    EvalCase("compute sha512 hash with openssl of file.bin", template: "openssl_sha512", category: "crypto", required: ["dgst", "-sha512"], "Direct: sha512"),
+    EvalCase("compute hmac sha256 of file.bin with secret KEY", template: "openssl_hmac", category: "crypto", required: ["-hmac"], "Direct: hmac"),
+    EvalCase("base64 encode file.bin to encoded.b64", template: "openssl_base64_encode", category: "crypto", required: ["base64"], "Direct: b64 encode"),
+    EvalCase("base64 decode encoded.b64 to decoded.bin", template: "openssl_base64_decode", category: "crypto", required: ["base64", "-d"], "Direct: b64 decode"),
+    EvalCase("aes encrypt secret.txt to secret.enc", template: "openssl_aes_encrypt", category: "crypto", required: ["aes-256-cbc"], "Direct: aes encrypt"),
+    EvalCase("aes decrypt secret.enc to secret.txt", template: "openssl_aes_decrypt", category: "crypto", required: ["enc", "-d", "aes-256-cbc"], "Direct: aes decrypt"),
+    EvalCase("generate dh params 2048 to dhparam.pem", template: "openssl_dhparam", category: "crypto", required: ["dhparam"], "Direct: dhparam"),
+    EvalCase("generate random hex 16 bytes", template: "openssl_rand_hex", category: "crypto", required: ["rand", "-hex"], "Direct: rand hex"),
+    EvalCase("verify key matches cert.pem and private.key modulus", template: "openssl_match_key", category: "crypto", required: ["modulus"], "Direct: match key"),
+    EvalCase("split pem bundle chain.pem into individual certs", template: "openssl_pem_extract_chain", category: "crypto", required: ["csplit"], "Direct: split bundle"),
+  ]),
+
+  ("FFmpegAdvanced", [
+    EvalCase("encode video.mov to h264 with crf 23", template: "ffmpeg_h264", category: "media", required: ["libx264"], "Direct: h264"),
+    EvalCase("transcode clip.mov using libx264 crf 20", template: "ffmpeg_h264", category: "media", required: ["libx264"], "Natural: x264"),
+    EvalCase("encode video.mp4 to hevc software encoder", template: "ffmpeg_hevc_x265", category: "media", required: ["libx265"], "Direct: hevc software"),
+    EvalCase("transcode clip.mov to h.265 with x265", template: "ffmpeg_hevc_x265", category: "media", required: ["libx265"], "Natural: x265"),
+    EvalCase("encode video.mov to hevc using hardware accelerated", template: "ffmpeg_hevc_videotoolbox", category: "media", required: ["hevc_videotoolbox"], "Direct: hardware hevc"),
+    EvalCase("encode movie.mov to AV1 using libsvtav1", template: "ffmpeg_av1_svt", category: "media", required: ["libsvtav1"], "Direct: SVT AV1"),
+    EvalCase("encode movie.mov to AV1 using libaom-av1", template: "ffmpeg_av1_aom", category: "media", required: ["libaom-av1"], "Direct: AOM AV1"),
+    EvalCase("crop video region 1280x720 from clip.mov", template: "ffmpeg_crop", category: "media", required: ["crop="], "Direct: crop"),
+    EvalCase("letterbox movie.mov to 1920x1080", template: "ffmpeg_pad", category: "media", required: ["pad="], "Direct: letterbox"),
+    EvalCase("concatenate videos from list.txt into merged", template: "ffmpeg_concat", category: "media", required: ["-f concat"], "Direct: concat"),
+    EvalCase("loop clip.mp4 3 times", template: "ffmpeg_loop", category: "media", required: ["stream_loop"], "Direct: loop"),
+    EvalCase("convert video.mov to webp animation", template: "ffmpeg_webp", category: "media", required: [".webp"], "Direct: webp"),
+    EvalCase("add watermark logo.png to clip.mov", template: "ffmpeg_watermark", category: "media", required: ["overlay="], "Direct: watermark"),
+    EvalCase("burn subs.srt into clip.mov", template: "ffmpeg_burn_subs", category: "media", required: ["subtitles="], "Direct: hardsub"),
+    EvalCase("mix two audio tracks a.m4a and b.m4a", template: "ffmpeg_audio_mix", category: "media", required: ["amix"], "Direct: audio mix"),
+    EvalCase("normalize audio loudness in clip.mov", template: "ffmpeg_normalize_audio", category: "media", required: ["loudnorm"], "Direct: normalize"),
+    EvalCase("extract video frames from clip.mov as png at 1 fps", template: "ffmpeg_frames", category: "media", required: ["frame_"], "Direct: frames"),
+    EvalCase("generate single thumbnail at 00:00:05 of clip.mov", template: "ffmpeg_thumbnail", category: "media", required: ["-vframes 1"], "Direct: thumbnail"),
+    EvalCase("create thumbnail grid tile of clip.mov as contact sheet", template: "ffmpeg_thumbnails_grid", category: "media", required: ["tile="], "Direct: tile thumbs"),
+    EvalCase("record screen to capture.mp4 with ffmpeg avfoundation", template: "ffmpeg_screen_record", category: "media", required: ["avfoundation"], "Direct: screen record"),
+    EvalCase("show video duration only of clip.mov in seconds", template: "ffmpeg_duration", category: "media", required: ["duration"], "Direct: duration only"),
+    EvalCase("mute clip.mov remove audio track", template: "ffmpeg_mute", category: "media", required: ["-an"], "Direct: mute"),
+    EvalCase("speed up clip.mov by 0.5", template: "ffmpeg_speed", category: "media", required: ["setpts"], "Direct: speed"),
+    EvalCase("rotate clip.mov 90 degrees using transpose 1", template: "ffmpeg_rotate_video", category: "media", required: ["transpose"], "Direct: rotate"),
+    EvalCase("segment clip.mov for hls streaming as playlist.m3u8", template: "ffmpeg_hls_segment", category: "media", required: ["hls_time"], "Direct: hls"),
+    EvalCase("segment clip.mov for dash streaming as manifest.mpd", template: "ffmpeg_dash_segment", category: "media", required: ["-f dash"], "Direct: dash"),
+    EvalCase("scale clip.mov preserving aspect to width 1280", template: "ffmpeg_change_resolution", category: "media", required: ["scale="], "Direct: aspect"),
+    EvalCase("extract subtitles from movie.mkv to subs.srt", template: "ffmpeg_extract_subs", category: "media", required: ["-map 0:s"], "Direct: extract subs"),
+    EvalCase("remux clip.mp4 to clip.mkv without re-encode", template: "ffmpeg_remux", category: "media", required: ["-c copy"], "Direct: remux"),
+    EvalCase("save just audio track of clip.mov without re-encode as audio.m4a", template: "ffmpeg_audio_only", category: "media", required: ["-vn", "-acodec copy"], "Direct: audio copy"),
+    EvalCase("change video volume of clip.mov by 1.5", template: "ffmpeg_volume", category: "media", required: ["volume="], "Direct: volume"),
+    EvalCase("two pass encode video.mp4 to out.mp4 with target bitrate 2M", template: "ffmpeg_two_pass", category: "media", required: ["pass 1", "pass 2"], "Direct: two pass"),
+    EvalCase("add fade in to clip.mov for 1 second", template: "ffmpeg_fade_in", category: "media", required: ["fade=t=in"], "Direct: fade-in"),
+    EvalCase("compress clip.mov to small.mp4 tiny for messaging", template: "ffmpeg_low_bitrate", category: "media", required: ["crf 35"], "Direct: low bitrate"),
+  ]),
+
+  ("ImagemagickAdvanced", [
+    EvalCase("crop region 800x600+0+0 from photo.jpg", template: "magick_crop", category: "media", required: ["-crop"], "Direct: crop"),
+    EvalCase("cut out a section of input.png at 400x300+10+10", template: "magick_crop", category: "media", required: ["-crop"], "Natural: cut section"),
+    EvalCase("rotate photo.jpg 90 degrees", template: "magick_rotate", category: "media", required: ["-rotate"], "Direct: rotate"),
+    EvalCase("turn image.png 180 degrees clockwise", template: "magick_rotate", category: "media", required: ["-rotate"], "Natural: turn"),
+    EvalCase("flip image.png vertically top to bottom", template: "magick_flip", category: "media", required: ["-flip"], "Direct: flip vertical"),
+    EvalCase("mirror photo.jpg vertically top to bottom", template: "magick_flip", category: "media", required: ["-flip"], "Synonym: mirror vert"),
+    EvalCase("flop image.png horizontally left to right", template: "magick_flop", category: "media", required: ["-flop"], "Direct: flop horizontal"),
+    EvalCase("mirror photo.jpg horizontally left to right", template: "magick_flop", category: "media", required: ["-flop"], "Synonym: mirror horiz"),
+    EvalCase("set jpeg quality 75 on photo.jpg", template: "magick_quality", category: "media", required: ["-quality"], "Direct: quality"),
+    EvalCase("compress image quality 85 on input.jpg", template: "magick_quality", category: "media", required: ["-quality"], "Natural: quality compression"),
+    EvalCase("strip metadata from image.jpg", template: "magick_strip", category: "media", required: ["-strip"], "Direct: strip metadata"),
+    EvalCase("remove exif data from photo.jpg", template: "magick_strip", category: "media", required: ["-strip"], "Synonym: remove exif"),
+    EvalCase("composite overlay watermark.png on photo.jpg", template: "magick_compose", category: "media", required: ["composite"], "Direct: composite overlay"),
+    EvalCase("overlay logo.png on top of cover.jpg", template: "magick_compose", category: "media", required: ["composite"], "Natural: overlay on top"),
+    EvalCase("create montage grid of *.jpg into contact sheet", template: "magick_montage", category: "media", required: ["montage"], "Direct: montage"),
+    EvalCase("tile multiple images into grid contact sheet", template: "magick_montage", category: "media", required: ["montage"], "Natural: tile grid"),
+    EvalCase("annotate caption 'Hello' on image.jpg", template: "magick_annotate", category: "media", required: ["-annotate"], "Direct: annotate"),
+    EvalCase("blur image.png with gaussian blur 0x8", template: "magick_blur", category: "media", required: ["-blur"], "Direct: blur"),
+    EvalCase("sharpen photo.jpg using unsharp mask", template: "magick_sharpen", category: "media", required: ["-sharpen"], "Direct: sharpen"),
+    EvalCase("convert photo.jpg to grayscale black and white", template: "magick_grayscale", category: "media", required: ["-colorspace"], "Direct: grayscale"),
+    EvalCase("apply sepia vintage tone to photo.jpg", template: "magick_sepia", category: "media", required: ["-sepia-tone"], "Direct: sepia"),
+    EvalCase("change brightness contrast 20x10 on image.jpg", template: "magick_brightness", category: "media", required: ["-brightness-contrast"], "Direct: brightness"),
+    EvalCase("boost contrast on photo.jpg", template: "magick_contrast", category: "media", required: ["-contrast"], "Direct: contrast"),
+    EvalCase("add white border 10x10 to photo.jpg", template: "magick_border", category: "media", required: ["-border"], "Direct: border"),
+    EvalCase("trim whitespace around image.png", template: "magick_trim", category: "media", required: ["-trim"], "Direct: trim whitespace"),
+    EvalCase("optimize photo.jpg for web", template: "magick_optimize", category: "media", required: ["-quality"], "Direct: optimize for web"),
+    EvalCase("show exif data of photo.jpg", template: "magick_exif", category: "media", required: ["EXIF"], "Direct: exif"),
+    EvalCase("batch resize all *.jpg by 50%", template: "magick_batch_resize", category: "media", required: ["mogrify"], "Direct: batch resize"),
+    EvalCase("invert colors of image.png", template: "magick_invert", category: "media", required: ["-negate"], "Direct: invert"),
+    EvalCase("create thumbnail 200x200 of photo.jpg", template: "magick_thumbnail", category: "media", required: ["-thumbnail"], "Direct: thumbnail"),
   ]),
 
   ("MacOS", [

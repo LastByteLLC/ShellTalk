@@ -113,7 +113,7 @@ public final class STMPipeline: Sendable {
 
     self.profile = prof
     self.config = cfg
-    self.matcher = IntentMatcher(store: st, config: cfg.matcherConfig)
+    self.matcher = IntentMatcher(store: st, config: cfg.matcherConfig, profile: prof)
     self.extractor = SlotExtractor()
     self.recognizer = EntityRecognizer(profile: prof)
     self.resolver = TemplateResolver(profile: prof)

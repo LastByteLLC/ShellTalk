@@ -49,6 +49,11 @@ public enum TemplateRefinements {
         discriminators: ["find"]
       ),
       "symlink": TemplateOverlay(
+        addIntents: [                                                    // Wave1 IDF compensation
+          "create symlink to PATH",
+          "symlink to /usr/local/bin",
+          "make a symlink",
+        ],
         discriminators: ["ln", "-s", "symlink"]                          // cand-006
       ),
       "make_target": TemplateOverlay(
@@ -73,14 +78,27 @@ public enum TemplateRefinements {
       ),
       "head_file": TemplateOverlay(
         addIntents: ["head FILE"],                                       // cand-020
-        negativeKeywords: ["folder", "directory"],                       // cand-1 (2026-04-23-wildtests)
+        negativeKeywords: [
+          "folder", "directory",                                          // cand-1 (2026-04-23-wildtests)
+          "largest", "biggest", "biggest 3", "top 3 largest",            // Wave1 IDF compensation
+        ],
         discriminators: ["head"]
+      ),
+      "find_large_files": TemplateOverlay(
+        addIntents: [
+          "show top largest files",                                      // Wave1 IDF compensation
+          "show the top largest files",
+          "show the top 3 largest files",
+          "biggest files in directory",
+        ]
       ),
       "ls_files": TemplateOverlay(
         addIntents: [                                                    // cand-1 (2026-04-23-wildtests)
           "first files in folder",
           "first files in this folder",
           "find files in my documents folder",                           // T2.2 specific
+          "find files in my documents",                                  // Wave1 IDF compensation
+          "find files in My Documents",
         ],
         negativeKeywords: ["du", "-sh", "-h"]                            // T2.2 — don't steal du queries
       ),
@@ -117,6 +135,40 @@ public enum TemplateRefinements {
       ),
       "tar_create": TemplateOverlay(
         negativeKeywords: ["first", "last"]                              // cand-1 (2026-04-23-wildtests)
+      ),
+      "tar_extract": TemplateOverlay(
+        // Wave1: don't steal queries with explicit destination dirs or
+        // single-file extraction — those have dedicated templates.
+        negativeKeywords: ["into", "single", "specific", "strip", "components", "removing", "verbose", "/tmp", "directory"]
+      ),
+      "magick_convert": TemplateOverlay(
+        // Wave3: don't steal "overlay X on Y" or strip queries
+        negativeKeywords: ["overlay", "on top", "composite", "remove exif", "strip metadata"]
+      ),
+      "for_range": TemplateOverlay(
+        addIntents: [                                                    // Wave4 IDF compensation
+          "loop from 1 to N",
+          "loop from 1 to 10",
+          "for i from 1 to N",
+        ]
+      ),
+      "md5_hash": TemplateOverlay(
+        // Wave5: md5_hash had "sha256 hash" in intents which now collides
+        // with the openssl_sha256 template. Push openssl-prefixed queries
+        // to the dedicated crypto templates.
+        negativeKeywords: ["openssl", "dgst", "sha256", "sha512", "with openssl"]
+      ),
+      "ffmpeg_loop": TemplateOverlay(
+        // Wave4: don't steal "loop from 1 to 10" — for_range owns that.
+        negativeKeywords: ["from", "seq", "for i", "for loop", "iterate", "1 to"]
+      ),
+      "tar_extract_to_dir": TemplateOverlay(
+        addIntents: [
+          "extract archive into output directory",
+          "untar archive into output directory",
+          "extract tar.gz into named directory",
+          "extract tarball to a specific destination directory",
+        ]
       ),
       "docker_logs": TemplateOverlay(
         negativeKeywords: [                                              // cand-1 (2026-04-23-wildtests); additive to built-in
@@ -163,7 +215,8 @@ public enum TemplateRefinements {
           "process yaml data",
           "extract field from yaml",
           "parse yaml config",
-        ]
+        ],
+        negativeKeywords: ["bundle", "archive", "tarball", "tar"]   // Wave1: yaml-from-tarball goes to tar_extract_single
       ),
       "awk_column": TemplateOverlay(
         addIntents: [                                                    // cand-1 (2026-04-23-wildtests)
@@ -209,6 +262,7 @@ public enum TemplateRefinements {
           "readme", "config", "package",
           "md", "txt", "yml", "yaml", "json", "toml", "xml",
           "doc", "pdf", "csv",
+          "largest", "biggest", "top 3",                                  // Wave1 IDF compensation
         ]
       ),
       // F2: open_with_app ("open X with Y") was poaching "open README.md"
@@ -263,7 +317,10 @@ public enum TemplateRefinements {
           // 'substitute http with https' (sed_replace).
           "curl URL with query string parameters",
           "fetch json endpoint with query params",
-        ]
+          "curl URL?filter=active",                                      // Wave2 — narrow, no "https" token
+          "curl URL with filter param",
+        ],
+        negativeKeywords: ["substitute", "replace"]                      // Wave2 — sed_replace shares 'http with https' token
       ),
       "npm_install": TemplateOverlay(
         addIntents: [                                                    // cand-9 (2026-04-23-round-a)
@@ -422,8 +479,13 @@ public enum TemplateRefinements {
         negativeKeywords: ["docker", "run", "container", "image", "nginx"]   // T2.4
       ),
       "docker_run": TemplateOverlay(
-        addIntents: ["docker run IMAGE"],                                // cand-021
-        discriminators: ["run"]
+        addIntents: [
+          "docker run IMAGE",                                            // cand-021
+          "docker run nginx",                                            // Wave4 IDF compensation
+          "docker run ubuntu",
+          "docker run -it ubuntu bash",
+        ],
+        discriminators: ["run", "docker"]
       ),
       "service_restart": TemplateOverlay(
         negativeKeywords: ["docker", "run"]                              // cand-021
@@ -446,13 +508,18 @@ public enum TemplateRefinements {
         negativeKeywords: ["dns"]                                        // cand-023
       ),
       "ping_host": TemplateOverlay(
+        negativeKeywords: ["chmod", "755", "644", "777", "server.sh"],   // Wave2 IDF compensation
         discriminators: ["check", "reach", "server"]                     // cand-035
+      ),
+      "scp_copy": TemplateOverlay(
+        negativeKeywords: ["chmod", "755", "644", "777", "permissions"]  // Wave2 IDF compensation
       ),
       "python_http_server": TemplateOverlay(
         negativeKeywords: [
           "chmod", "755", "server.sh",           // cand-002
           "substitute", "replace", "with",       // cand-009
           "check",                                // cand-035
+          "644", "777",                           // Wave2 IDF compensation
         ]
       ),
       "curl_post_json": TemplateOverlay(

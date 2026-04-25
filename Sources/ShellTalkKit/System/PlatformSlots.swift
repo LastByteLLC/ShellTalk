@@ -133,6 +133,53 @@ public struct PlatformSlots: Sendable {
     case "SVC_RESTART":
       return profile.os == .macOS ? "brew services restart" : "sudo systemctl restart"
 
+    // ImageMagick — v7 ships `magick`; v6 ships `convert`.
+    // Falls back to `magick` when no flavor is detected — that matches the
+    // recommended modern install on both macOS Homebrew and Ubuntu apt.
+    case "IM_CMD":
+      if profile.commandFlavors["magick"] == "imagemagick7" { return "magick" }
+      if profile.commandFlavors["convert"] == "imagemagick6" { return "convert" }
+      // No probe data yet: prefer `magick` if it's on PATH, otherwise fall
+      // back to `convert`. On Linux without ImageMagick this still defaults
+      // to `magick` for forward compatibility.
+      if profile.hasCommand("magick") { return "magick" }
+      if profile.hasCommand("convert") { return "convert" }
+      return "magick"
+
+    // OpenSSL — prefer Homebrew openssl@3 over LibreSSL on macOS.
+    // Linux: just use whatever's on PATH (typically OpenSSL 3.x).
+    case "OPENSSL_CMD":
+      if profile.os == .macOS {
+        let brew3 = "/opt/homebrew/opt/openssl@3/bin/openssl"
+        let brewDefault = "/opt/homebrew/bin/openssl"
+        let intelBrew = "/usr/local/opt/openssl@3/bin/openssl"
+        if FileManager.default.isExecutableFile(atPath: brew3) { return brew3 }
+        if FileManager.default.isExecutableFile(atPath: intelBrew) { return intelBrew }
+        if FileManager.default.isExecutableFile(atPath: brewDefault) { return brewDefault }
+      }
+      return "openssl"
+
+    // OpenSSL 3.x moved legacy ciphers (DES, RC4, BF) into a separate provider.
+    // Templates using those algorithms append {OPENSSL_LEGACY}.
+    case "OPENSSL_LEGACY":
+      return profile.capabilities.contains("openssl.legacy") ? "-provider legacy -provider default" : ""
+
+    // tar zstd flag: GNU 1.31+ supports --zstd directly; otherwise pipe via -I.
+    case "TAR_ZSTD_FLAG":
+      if profile.commandFlavors["tar"] == "gnu" { return "--zstd" }
+      return "-I zstd"
+
+    // tar xz flag: same shape as zstd. GNU exposes -J / --xz; BSD honors --xz too.
+    case "TAR_XZ_FLAG":
+      return "--xz"
+
+    // Reset archive ownership to root:root for reproducible builds.
+    case "TAR_OWNERSHIP_RESET":
+      if profile.commandFlavors["tar"] == "bsd" || profile.os == .macOS {
+        return "--uname '' --gname ''"
+      }
+      return "--owner=0 --group=0"
+
     default:
       return nil
     }
@@ -155,5 +202,9 @@ public struct PlatformSlots: Sendable {
     "DU_SORT_SIZE",
     "HOSTNAME_CMD",
     "NOTIFY_CMD",
+    "SVC_RESTART",
+    "IM_CMD",
+    "OPENSSL_CMD", "OPENSSL_LEGACY",
+    "TAR_ZSTD_FLAG", "TAR_XZ_FLAG", "TAR_OWNERSHIP_RESET",
   ]
 }

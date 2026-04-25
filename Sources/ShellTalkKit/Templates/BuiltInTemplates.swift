@@ -15,7 +15,7 @@ public enum BuiltInTemplates {
   public static let all: [TemplateCategory] = [
     fileOperations, git, textProcessing,
     devTools, macOSSpecific, network, system, packages,
-    compression, cloud, media, shellScripting,
+    compression, cloud, media, shellScripting, crypto,
   ]
 
   // MARK: - File Operations
@@ -1846,6 +1846,298 @@ public enum BuiltInTemplates {
         ],
         discriminators: ["auth", "token", "bearer", "authorization", "authenticated"]
       ),
+      // --- Wave 2: curl deep coverage (incant) ---
+      CommandTemplate(
+        id: "curl_put",
+        intents: [
+          "curl PUT request", "http put request", "send put",
+          "curl -X PUT", "update resource via PUT",
+        ],
+        command: "curl -s -X PUT -H 'Content-Type: application/json' -d '{BODY}' '{URL}'",
+        slots: [
+          "URL": SlotDefinition(type: .url, extractPattern: #"(https?://\S+)"#),
+          "BODY": SlotDefinition(type: .string, defaultValue: "{}",
+            extractPattern: #"(?:body|data|json)\s+['\"]?(\{.+\})['\"]?"#),
+        ],
+        discriminators: ["put", "PUT", "update resource"]
+      ),
+      CommandTemplate(
+        id: "curl_patch",
+        intents: [
+          "curl PATCH request", "http patch request", "send patch",
+          "curl -X PATCH", "partial update via PATCH",
+        ],
+        command: "curl -s -X PATCH -H 'Content-Type: application/json' -d '{BODY}' '{URL}'",
+        slots: [
+          "URL": SlotDefinition(type: .url, extractPattern: #"(https?://\S+)"#),
+          "BODY": SlotDefinition(type: .string, defaultValue: "{}",
+            extractPattern: #"(?:body|data|json)\s+['\"]?(\{.+\})['\"]?"#),
+        ],
+        discriminators: ["patch", "PATCH", "partial update"]
+      ),
+      CommandTemplate(
+        id: "curl_delete",
+        intents: [
+          "curl DELETE request", "http delete request",
+          "curl -X DELETE", "delete resource via curl",
+          "send a DELETE method via curl",
+        ],
+        command: "curl -s -X DELETE '{URL}'",
+        slots: [
+          "URL": SlotDefinition(type: .url, extractPattern: #"(https?://\S+)"#),
+        ],
+        negativeKeywords: ["file", "temp", "log", "txt", "old", "trash", "rm"],
+        discriminators: ["http", "https", "DELETE method", "remove resource", "url"]
+      ),
+      CommandTemplate(
+        id: "curl_follow_redirects",
+        intents: [
+          "curl follow redirects", "curl -L follow",
+          "fetch with redirects", "follow location header",
+          "curl following 30x redirects",
+        ],
+        command: "curl -sL '{URL}'",
+        slots: [
+          "URL": SlotDefinition(type: .url, extractPattern: #"(https?://\S+)"#),
+        ],
+        discriminators: ["follow", "redirects", "-L", "30x"]
+      ),
+      CommandTemplate(
+        id: "curl_basic_auth",
+        intents: [
+          "curl basic auth", "curl with username password",
+          "http basic authentication",
+          "curl -u user:pass", "authenticate via basic auth",
+        ],
+        command: "curl -s -u {USER}:{PASS} '{URL}'",
+        slots: [
+          "USER": SlotDefinition(type: .string,
+            extractPattern: #"(?:user|as)\s+(\w+)|(\w+):"#),
+          "PASS": SlotDefinition(type: .string, defaultValue: "PASSWORD",
+            extractPattern: #":(\S+)"#),
+          "URL": SlotDefinition(type: .url, extractPattern: #"(https?://\S+)"#),
+        ],
+        discriminators: ["basic auth", "basic", "username password", "-u"]
+      ),
+      CommandTemplate(
+        id: "curl_form_upload",
+        intents: [
+          "curl upload file", "curl form data upload",
+          "post file via curl", "multipart form upload",
+          "curl -F file upload",
+        ],
+        command: "curl -s -F 'file=@{FILE}' '{URL}'",
+        slots: [
+          "FILE": SlotDefinition(type: .path,
+            extractPattern: #"(?:upload|file)\s+(\S+\.\w+)"#),
+          "URL": SlotDefinition(type: .url, extractPattern: #"(https?://\S+)"#),
+        ],
+        discriminators: ["upload file", "form data", "multipart", "-F"]
+      ),
+      CommandTemplate(
+        id: "curl_download_progress",
+        intents: [
+          "curl download with progress", "curl with progress display",
+          "show curl progress", "download with progress meter",
+          "curl --progress-bar",
+        ],
+        command: "curl -L --progress-bar -o {OUTPUT} '{URL}'",
+        slots: [
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "output",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+          "URL": SlotDefinition(type: .url, extractPattern: #"(https?://\S+)"#),
+        ],
+        negativeKeywords: ["grep", "and", "logs", "search", "foo"],
+        discriminators: ["progress", "progress bar", "--progress-bar"]
+      ),
+      CommandTemplate(
+        id: "curl_resume",
+        intents: [
+          "curl resume download", "continue interrupted download",
+          "curl -C - resume", "resume partial download",
+          "curl pick up where stopped",
+        ],
+        command: "curl -L -C - -o {OUTPUT} '{URL}'",
+        slots: [
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "output",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+          "URL": SlotDefinition(type: .url, extractPattern: #"(https?://\S+)"#),
+        ],
+        discriminators: ["resume", "continue", "-C -", "interrupted"]
+      ),
+      CommandTemplate(
+        id: "curl_mtls",
+        intents: [
+          "curl mutual tls", "curl with client certificate",
+          "curl --cert client cert", "mtls request",
+          "curl with mTLS",
+        ],
+        command: "curl -s --cert {CERT} --key {KEY} '{URL}'",
+        slots: [
+          "CERT": SlotDefinition(type: .path, defaultValue: "client.crt",
+            extractPattern: #"(?:cert)\s+(\S+\.(?:crt|pem))"#),
+          "KEY": SlotDefinition(type: .path, defaultValue: "client.key",
+            extractPattern: #"(?:key)\s+(\S+\.(?:key|pem))"#),
+          "URL": SlotDefinition(type: .url, extractPattern: #"(https?://\S+)"#),
+        ],
+        discriminators: ["mtls", "mutual tls", "client cert", "--cert"]
+      ),
+      CommandTemplate(
+        id: "curl_cookies",
+        intents: [
+          "curl with cookies", "curl save cookies",
+          "curl -b cookie jar", "include cookies in request",
+          "curl using cookie file",
+        ],
+        command: "curl -s -b {COOKIES} -c {COOKIES} '{URL}'",
+        slots: [
+          "COOKIES": SlotDefinition(type: .path, defaultValue: "cookies.txt",
+            extractPattern: #"(?:cookies?)\s+(?:from|file)?\s*(\S+)"#),
+          "URL": SlotDefinition(type: .url, extractPattern: #"(https?://\S+)"#),
+        ],
+        discriminators: ["cookies", "cookie jar", "-b", "-c"]
+      ),
+      CommandTemplate(
+        id: "curl_user_agent",
+        intents: [
+          "curl with custom user agent", "curl -A user agent",
+          "set user agent string", "curl --user-agent",
+          "curl pretending to be browser",
+        ],
+        command: "curl -s -A '{UA}' '{URL}'",
+        slots: [
+          "UA": SlotDefinition(type: .string, defaultValue: "Mozilla/5.0",
+            extractPattern: #"(?:agent|UA)\s+['\"]?([^'\"]+)['\"]?"#),
+          "URL": SlotDefinition(type: .url, extractPattern: #"(https?://\S+)"#),
+        ],
+        discriminators: ["user agent", "user-agent", "-A", "agent string"]
+      ),
+      CommandTemplate(
+        id: "curl_timing",
+        intents: [
+          "curl timing breakdown", "curl with timing details",
+          "show curl request timing", "curl response time",
+          "curl -w timing format",
+        ],
+        command: "curl -s -o /dev/null -w 'time_namelookup: %{time_namelookup}\\ntime_connect: %{time_connect}\\ntime_total: %{time_total}\\n' '{URL}'",
+        slots: [
+          "URL": SlotDefinition(type: .url, extractPattern: #"(https?://\S+)"#),
+        ],
+        discriminators: ["timing", "time breakdown", "response time", "-w"]
+      ),
+      CommandTemplate(
+        id: "curl_save_headers",
+        intents: [
+          "curl save response headers to file",
+          "curl write headers to file",
+          "curl -D dump headers to file",
+          "save curl headers to a separate file",
+          "dump headers to txt file",
+        ],
+        command: "curl -s -D {HEADERS} -o {BODY} '{URL}'",
+        slots: [
+          "HEADERS": SlotDefinition(type: .path, defaultValue: "headers.txt",
+            extractPattern: #"(?:headers?)\s+(?:to|file)?\s*(\S+\.txt)"#),
+          "BODY": SlotDefinition(type: .path, defaultValue: "body.html",
+            extractPattern: #"(?:body)\s+(?:to|file)?\s*(\S+)"#),
+          "URL": SlotDefinition(type: .url, extractPattern: #"(https?://\S+)"#),
+        ],
+        negativeKeywords: ["check", "show", "view", "for"],
+        discriminators: ["save", "dump", "-D", "to file", "to txt"]
+      ),
+      CommandTemplate(
+        id: "curl_head_method",
+        intents: [
+          "curl HEAD request", "send HEAD method",
+          "curl -I HEAD only", "fetch only headers via HEAD",
+          "curl head method",
+        ],
+        command: "curl -sI -X HEAD '{URL}'",
+        slots: [
+          "URL": SlotDefinition(type: .url, extractPattern: #"(https?://\S+)"#),
+        ],
+        discriminators: ["HEAD method", "HEAD request", "-X HEAD"]
+      ),
+      CommandTemplate(
+        id: "curl_max_time",
+        intents: [
+          "curl with max time", "curl timeout",
+          "curl --max-time", "limit curl request duration",
+          "curl with deadline",
+        ],
+        command: "curl -s --max-time {SECS} '{URL}'",
+        slots: [
+          "SECS": SlotDefinition(type: .number, defaultValue: "30",
+            extractPattern: #"(\d+)\s*(?:s|sec|seconds|timeout)"#),
+          "URL": SlotDefinition(type: .url, extractPattern: #"(https?://\S+)"#),
+        ],
+        discriminators: ["timeout", "max time", "--max-time", "deadline"]
+      ),
+      CommandTemplate(
+        id: "curl_ipv4",
+        intents: [
+          "curl ipv4 only", "force ipv4 for curl",
+          "curl -4 ipv4", "use ipv4 only in curl request",
+        ],
+        command: "curl -s -4 '{URL}'",
+        slots: [
+          "URL": SlotDefinition(type: .url, extractPattern: #"(https?://\S+)"#),
+        ],
+        discriminators: ["ipv4", "-4", "force ipv4"]
+      ),
+      CommandTemplate(
+        id: "curl_ipv6",
+        intents: [
+          "curl ipv6 only", "force ipv6 for curl",
+          "curl -6 ipv6", "use ipv6 only in curl request",
+        ],
+        command: "curl -s -6 '{URL}'",
+        slots: [
+          "URL": SlotDefinition(type: .url, extractPattern: #"(https?://\S+)"#),
+        ],
+        discriminators: ["ipv6", "-6", "force ipv6"]
+      ),
+      CommandTemplate(
+        id: "curl_verbose",
+        intents: [
+          "curl verbose", "curl -v debug",
+          "show curl request and response details",
+          "curl with verbose output",
+        ],
+        command: "curl -v '{URL}'",
+        slots: [
+          "URL": SlotDefinition(type: .url, extractPattern: #"(https?://\S+)"#),
+        ],
+        discriminators: ["verbose", "-v", "debug curl"]
+      ),
+      CommandTemplate(
+        id: "curl_status_only",
+        intents: [
+          "curl status code only", "curl -o /dev/null status",
+          "get http status with curl",
+          "curl -w status only",
+        ],
+        command: "curl -s -o /dev/null -w '%{http_code}\\n' '{URL}'",
+        slots: [
+          "URL": SlotDefinition(type: .url, extractPattern: #"(https?://\S+)"#),
+        ],
+        discriminators: ["status code", "http status", "%{http_code}"]
+      ),
+      CommandTemplate(
+        id: "curl_post_form",
+        intents: [
+          "curl post form data", "curl -d form encoded post",
+          "post application/x-www-form-urlencoded",
+          "curl form fields post",
+        ],
+        command: "curl -s -X POST -d '{DATA}' '{URL}'",
+        slots: [
+          "DATA": SlotDefinition(type: .string, defaultValue: "key=value",
+            extractPattern: #"(?:data|fields)\s+['\"]?([^'\"]+)['\"]?"#),
+          "URL": SlotDefinition(type: .url, extractPattern: #"(https?://\S+)"#),
+        ],
+        discriminators: ["form data", "form fields", "form encoded", "x-www-form-urlencoded"]
+      ),
       CommandTemplate(
         id: "ssh_connect",
         intents: [
@@ -2310,19 +2602,6 @@ public enum BuiltInTemplates {
         command: "crontab -e"
       ),
       CommandTemplate(
-        id: "random_password",
-        intents: [
-          "generate password", "random password", "create password",
-          "generate random string", "random token",
-          "generate secret", "secure password",
-        ],
-        command: "openssl rand -base64 {LENGTH}",
-        slots: [
-          "LENGTH": SlotDefinition(type: .number, defaultValue: "32",
-            extractPattern: #"(\d+)\s*(?:char|byte|length)"#),
-        ]
-      ),
-      CommandTemplate(
         id: "md5_hash",
         intents: [
           "md5 hash", "calculate md5", "md5sum",
@@ -2393,20 +2672,6 @@ public enum BuiltInTemplates {
           "active users", "w command",
         ],
         command: "who"
-      ),
-      CommandTemplate(
-        id: "openssl_check",
-        intents: [
-          "check ssl certificate", "verify ssl", "test ssl",
-          "ssl certificate info", "check https certificate",
-          "openssl check", "certificate details",
-          "inspect ssl cert", "check tls",
-        ],
-        command: "openssl s_client -connect {HOST}:443 -brief <<< ''",
-        slots: [
-          "HOST": SlotDefinition(type: .string,
-            extractPattern: #"(?:for|of|on)\s+(\S+)"#),
-        ]
       ),
       CommandTemplate(
         id: "nmap_scan",
@@ -2764,6 +3029,247 @@ public enum BuiltInTemplates {
           "FILE": SlotDefinition(type: .path,
             extractPattern: #"(?:decompress|extract)\s+(\S+)"#),
         ]
+      ),
+      // --- Wave 1: tar deep coverage (incant) ---
+      CommandTemplate(
+        id: "tar_create_xz",
+        intents: [
+          "create tar.xz", "tar xz archive", "compress directory with xz tar",
+          "make tar.xz archive", "tar with xz compression",
+        ],
+        command: "tar -cJf {ARCHIVE} {PATH}",
+        slots: [
+          "ARCHIVE": SlotDefinition(type: .path, defaultValue: "archive.tar.xz",
+            extractPattern: #"(?:as|to|into|named?)\s+(\S+\.tar\.xz)"#),
+          "PATH": SlotDefinition(type: .path, defaultValue: ".",
+            extractPattern: #"(?:of|archive|compress)\s+(?:the\s+)?(\S+)"#),
+        ],
+        discriminators: ["xz", "tar.xz", "lzma"]
+      ),
+      CommandTemplate(
+        id: "tar_create_zst",
+        intents: [
+          "create tar.zst", "create tar.zst archive",
+          "compress directory with zstd tar", "compress with zstandard tar",
+          "compress directory with zstandard tar", "compress folder with zstandard tar",
+          "make tar.zst archive", "tar with zstd compression",
+          "tar.zst of folder",
+        ],
+        command: "tar -cf {ARCHIVE} {TAR_ZSTD_FLAG} {PATH}",
+        slots: [
+          "ARCHIVE": SlotDefinition(type: .path, defaultValue: "archive.tar.zst",
+            extractPattern: #"(?:as|to|into|named?)\s+(\S+\.tar\.zst)"#),
+          "PATH": SlotDefinition(type: .path, defaultValue: ".",
+            extractPattern: #"(?:of|archive|compress)\s+(?:the\s+)?(\S+)"#),
+        ],
+        negativeKeywords: ["database", "file.sql", "single file"],
+        discriminators: ["tar.zst", "zstandard", "zstd"],
+        requires: ["capability:tar.zstd"]
+      ),
+      CommandTemplate(
+        id: "tar_extract_xz",
+        intents: [
+          "extract tar.xz", "untar xz archive", "decompress tar.xz",
+          "unpack tar.xz", "extract xz tarball",
+        ],
+        command: "tar -xJf {ARCHIVE}",
+        slots: [
+          "ARCHIVE": SlotDefinition(type: .path,
+            extractPattern: #"(?:extract|untar|unpack)\s+(\S+\.tar\.xz)"#),
+        ],
+        discriminators: ["xz", "tar.xz"]
+      ),
+      CommandTemplate(
+        id: "tar_extract_zst",
+        intents: [
+          "extract tar.zst", "extract bundle.tar.zst", "untar zst archive",
+          "decompress tar.zst", "decompress source.tar.zst",
+          "unpack tar.zst", "extract zstd tarball",
+          "extract zst tarball", "untar tar.zst",
+        ],
+        command: "tar -xf {ARCHIVE} {TAR_ZSTD_FLAG}",
+        slots: [
+          "ARCHIVE": SlotDefinition(type: .path,
+            extractPattern: #"(?:extract|untar|unpack|decompress)\s+(\S+\.tar\.zst)"#),
+        ],
+        discriminators: ["tar.zst", "tar zst"],
+        requires: ["capability:tar.zstd"]
+      ),
+      CommandTemplate(
+        id: "tar_extract_to_dir",
+        intents: [
+          "tar extract -C destination",
+          "tar -xzf -C destination",
+          "extract tarball into directory",
+          "untar into specific directory",
+          "extract archive into named output folder",
+        ],
+        command: "tar -xzf {ARCHIVE} -C {DEST}",
+        slots: [
+          "ARCHIVE": SlotDefinition(type: .path,
+            extractPattern: #"(?:extract|untar|unpack)\s+(\S+\.tar(?:\.\w+)?)"#),
+          "DEST": SlotDefinition(type: .path, defaultValue: ".",
+            extractPattern: #"(?:to|into)\s+(\S+)"#),
+        ],
+        negativeKeywords: ["strip", "removing", "remove top", "extract single"],
+        discriminators: ["into", "-C", "destination", "specific directory"]
+      ),
+      CommandTemplate(
+        id: "tar_extract_strip",
+        intents: [
+          "extract tar strip components", "untar strip leading directory",
+          "tar extract --strip-components", "remove top-level directory from tarball",
+          "extract tar without top folder", "untar removing top folder",
+          "extract tar.gz removing top folder", "strip top directory from archive",
+          "untar release.tar.gz removing top folder",
+          "extract tarball strip components",
+        ],
+        command: "tar -xzf {ARCHIVE} --strip-components={N}",
+        slots: [
+          "ARCHIVE": SlotDefinition(type: .path,
+            extractPattern: #"(?:extract|untar|unpack)\s+(\S+\.tar(?:\.\w+)?)"#),
+          "N": SlotDefinition(type: .number, defaultValue: "1",
+            extractPattern: #"strip[\s-]+(\d+)|--strip-components[= ](\d+)"#),
+        ],
+        negativeKeywords: ["create", "mkdir", "src/", "make", "new"],
+        discriminators: ["strip", "components", "leading", "removing top", "remove top"]
+      ),
+      CommandTemplate(
+        id: "tar_list_verbose",
+        intents: [
+          "tar list verbose", "list tar contents with sizes",
+          "show tar archive contents detailed", "tar -tvzf",
+          "verbose tar listing",
+        ],
+        command: "tar -tvzf {ARCHIVE}",
+        slots: [
+          "ARCHIVE": SlotDefinition(type: .path,
+            extractPattern: #"(?:of|in|contents)\s+(\S+)"#),
+        ],
+        discriminators: ["verbose", "detailed", "sizes", "with sizes"]
+      ),
+      CommandTemplate(
+        id: "tar_append",
+        intents: [
+          "append to tar", "add file to tar archive",
+          "tar append --append",
+          "add to existing tarball",
+        ],
+        command: "tar -rf {ARCHIVE} {PATH}",
+        slots: [
+          "ARCHIVE": SlotDefinition(type: .path,
+            extractPattern: #"(?:to|into)\s+(\S+\.tar)"#),
+          "PATH": SlotDefinition(type: .path,
+            extractPattern: #"(?:append|add)\s+(\S+)"#),
+        ],
+        discriminators: ["append", "add to"]
+      ),
+      CommandTemplate(
+        id: "tar_exclude",
+        intents: [
+          "tar with exclude pattern", "create tar excluding files",
+          "tar archive but skip pattern", "tar --exclude",
+          "compress directory but exclude node_modules",
+        ],
+        command: "tar -czf {ARCHIVE} --exclude='{PATTERN}' {PATH}",
+        slots: [
+          "ARCHIVE": SlotDefinition(type: .path, defaultValue: "archive.tar.gz",
+            extractPattern: #"(?:as|to|into|named?)\s+(\S+\.tar(?:\.\w+)?)"#),
+          "PATTERN": SlotDefinition(type: .pattern, defaultValue: "*.log",
+            extractPattern: #"(?:exclud(?:e|ing))\s+(\S+)"#),
+          "PATH": SlotDefinition(type: .path, defaultValue: ".",
+            extractPattern: #"(?:of|compress|archive)\s+(?:the\s+)?(\S+?)\s+(?:exclud|but|skip)"#),
+        ],
+        discriminators: ["exclude", "excluding", "skip", "without"]
+      ),
+      CommandTemplate(
+        id: "tar_extract_single",
+        intents: [
+          "extract single file from tar", "extract one file from tarball",
+          "tar extract one file", "extract specific file from tar",
+          "untar just one file", "extract one entry from archive",
+          "extract a specific file from archive", "get one file out of tarball",
+          "extract one file from tar.gz",
+          "extract a single entry from a tar archive",
+          "get a file from inside a tarball",
+          "extract FILE from archive.tar.gz",
+          "extract FILENAME from tar.gz",
+          "extract FILE from tarball",
+          "get FILE out of tar.gz",
+        ],
+        command: "tar -xzf {ARCHIVE} {FILE}",
+        slots: [
+          "ARCHIVE": SlotDefinition(type: .path,
+            extractPattern: #"(?:from|out of)\s+(\S+\.tar(?:\.\w+)?)"#),
+          "FILE": SlotDefinition(type: .path,
+            extractPattern: #"(?:extract|get)\s+(\S+\.\w+)\s+(?:from|out)"#),
+        ],
+        negativeKeywords: ["pull request", "git pull", " and ", "all files"],
+        discriminators: ["single", "specific", "one file", "just one", "tarball", "from archive", "from tar"]
+      ),
+      CommandTemplate(
+        id: "tar_compare",
+        intents: [
+          "tar compare", "tar diff archive against filesystem",
+          "verify tar matches files", "tar --diff",
+          "check tar against directory",
+        ],
+        command: "tar -dzf {ARCHIVE} {PATH}",
+        slots: [
+          "ARCHIVE": SlotDefinition(type: .path,
+            extractPattern: #"(?:compare|diff|verify)\s+(\S+\.tar(?:\.\w+)?)"#),
+          "PATH": SlotDefinition(type: .path, defaultValue: ".",
+            extractPattern: #"(?:against|with)\s+(\S+)"#),
+        ],
+        discriminators: ["compare", "diff", "against", "matches"]
+      ),
+      CommandTemplate(
+        id: "tar_preserve_perms",
+        intents: [
+          "tar preserve permissions", "tar with permissions",
+          "create tar keeping ownership", "tar -p preserve perms",
+          "archive with original permissions",
+        ],
+        command: "tar -cpzf {ARCHIVE} {PATH}",
+        slots: [
+          "ARCHIVE": SlotDefinition(type: .path, defaultValue: "archive.tar.gz",
+            extractPattern: #"(?:as|to|into|named?)\s+(\S+\.tar(?:\.\w+)?)"#),
+          "PATH": SlotDefinition(type: .path, defaultValue: ".",
+            extractPattern: #"(?:of|archive|compress)\s+(?:the\s+)?(\S+)"#),
+        ],
+        discriminators: ["preserve", "permissions", "perms", "keep ownership"]
+      ),
+      CommandTemplate(
+        id: "tar_dereference",
+        intents: [
+          "tar follow symlinks", "tar dereference",
+          "tar -h follow links", "archive with symlink targets",
+          "tar resolve symbolic links",
+        ],
+        command: "tar -czhf {ARCHIVE} {PATH}",
+        slots: [
+          "ARCHIVE": SlotDefinition(type: .path, defaultValue: "archive.tar.gz",
+            extractPattern: #"(?:as|to|into|named?)\s+(\S+\.tar(?:\.\w+)?)"#),
+          "PATH": SlotDefinition(type: .path, defaultValue: ".",
+            extractPattern: #"(?:of|archive|follow)\s+(?:the\s+)?(\S+)"#),
+        ],
+        discriminators: ["dereference", "follow", "symlink", "symbolic"]
+      ),
+      CommandTemplate(
+        id: "tar_create_no_compress",
+        intents: [
+          "create plain tar", "tar without compression",
+          "tar uncompressed", "make .tar archive only",
+          "raw tar no gzip",
+        ],
+        command: "tar -cf {ARCHIVE} {PATH}",
+        slots: [
+          "ARCHIVE": SlotDefinition(type: .path, defaultValue: "archive.tar",
+            extractPattern: #"(?:as|to|into|named?)\s+(\S+\.tar)"#),
+          "PATH": SlotDefinition(type: .path, defaultValue: ".",
+            extractPattern: #"(?:of|archive|tar)\s+(?:the\s+)?(\S+)"#),
+        ],
+        discriminators: ["plain", "uncompressed", "no compression", "raw"]
       ),
     ]
   )
@@ -3296,6 +3802,577 @@ public enum BuiltInTemplates {
         ],
         discriminators: ["info", "metadata", "details", "duration", "format", "ffprobe"]
       ),
+      // --- Wave 4: ffmpeg deep coverage (incant) ---
+      CommandTemplate(
+        id: "ffmpeg_h264",
+        intents: [
+          "encode video to h264", "transcode video to h.264",
+          "convert video using libx264", "ffmpeg encode h264",
+          "convert video to mp4 h264",
+        ],
+        command: "ffmpeg -i {INPUT} -c:v libx264 -preset {PRESET} -crf {CRF} {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:encode|transcode|convert)\s+(\S+\.\w+)"#),
+          "PRESET": SlotDefinition(type: .string, defaultValue: "medium",
+            extractPattern: #"(?:preset)\s+(\w+)"#),
+          "CRF": SlotDefinition(type: .number, defaultValue: "23",
+            extractPattern: #"(?:crf|quality)\s+(\d+)"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "out.mp4",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["h264", "h.264", "libx264", "x264"]
+      ),
+      CommandTemplate(
+        id: "ffmpeg_hevc_x265",
+        intents: [
+          "encode video to hevc software", "transcode to h.265 with x265",
+          "convert video using libx265 software encoder",
+          "ffmpeg hevc software encode",
+        ],
+        command: "ffmpeg -i {INPUT} -c:v libx265 -preset {PRESET} -crf {CRF} {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:encode|transcode|convert)\s+(\S+\.\w+)"#),
+          "PRESET": SlotDefinition(type: .string, defaultValue: "medium"),
+          "CRF": SlotDefinition(type: .number, defaultValue: "28",
+            extractPattern: #"(?:crf|quality)\s+(\d+)"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "out.mp4",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["x265", "libx265", "hevc software", "software hevc"]
+      ),
+      CommandTemplate(
+        id: "ffmpeg_hevc_videotoolbox",
+        intents: [
+          "encode video to hevc using hardware",
+          "transcode to h.265 with videotoolbox",
+          "ffmpeg hevc hardware accelerated",
+          "macos hardware accelerated hevc",
+        ],
+        command: "ffmpeg -i {INPUT} -c:v hevc_videotoolbox -b:v {BITRATE} {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:encode|transcode|convert)\s+(\S+\.\w+)"#),
+          "BITRATE": SlotDefinition(type: .string, defaultValue: "5M",
+            extractPattern: #"(\d+[Mk])"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "out.mp4",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["hardware", "videotoolbox", "hevc hardware"],
+        requires: ["flavor:ffmpeg=ffmpeg"]
+      ),
+      CommandTemplate(
+        id: "ffmpeg_av1_svt",
+        intents: [
+          "encode to av1 with svt",
+          "transcode to AV1 using libsvtav1",
+          "ffmpeg av1 svt-av1 fast encode",
+        ],
+        command: "ffmpeg -i {INPUT} -c:v libsvtav1 -crf {CRF} {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:encode|transcode|convert)\s+(\S+\.\w+)"#),
+          "CRF": SlotDefinition(type: .number, defaultValue: "30"),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "out.mkv",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["svt", "svt-av1", "libsvtav1"]
+      ),
+      CommandTemplate(
+        id: "ffmpeg_av1_aom",
+        intents: [
+          "encode to av1 with aom",
+          "transcode to AV1 using libaom-av1",
+          "ffmpeg av1 aom encode",
+        ],
+        command: "ffmpeg -i {INPUT} -c:v libaom-av1 -crf {CRF} -b:v 0 {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:encode|transcode|convert)\s+(\S+\.\w+)"#),
+          "CRF": SlotDefinition(type: .number, defaultValue: "30"),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "out.mkv",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["aom", "libaom-av1", "aom av1"]
+      ),
+      CommandTemplate(
+        id: "ffmpeg_crop",
+        intents: [
+          "crop video", "ffmpeg crop region",
+          "trim sides off video", "cut a region from a video",
+        ],
+        command: "ffmpeg -i {INPUT} -filter:v 'crop={W}:{H}:{X}:{Y}' {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:crop)\s+(\S+\.\w+)"#),
+          "W": SlotDefinition(type: .number, defaultValue: "1280"),
+          "H": SlotDefinition(type: .number, defaultValue: "720"),
+          "X": SlotDefinition(type: .number, defaultValue: "0"),
+          "Y": SlotDefinition(type: .number, defaultValue: "0"),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "cropped.mp4",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["crop video", "cut region", "crop=", "video crop"]
+      ),
+      CommandTemplate(
+        id: "ffmpeg_pad",
+        intents: [
+          "pad video to aspect", "letterbox video",
+          "add black bars to video",
+          "ffmpeg pad video",
+        ],
+        command: "ffmpeg -i {INPUT} -vf 'pad={W}:{H}:(ow-iw)/2:(oh-ih)/2:black' {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:pad|letterbox)\s+(\S+\.\w+)"#),
+          "W": SlotDefinition(type: .number, defaultValue: "1920"),
+          "H": SlotDefinition(type: .number, defaultValue: "1080"),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "padded.mp4",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["letterbox", "pad video", "black bars"]
+      ),
+      CommandTemplate(
+        id: "ffmpeg_concat",
+        intents: [
+          "concatenate videos", "join multiple videos",
+          "merge clips into one", "ffmpeg concat list",
+        ],
+        command: "ffmpeg -f concat -safe 0 -i {LIST} -c copy {OUTPUT}",
+        slots: [
+          "LIST": SlotDefinition(type: .path, defaultValue: "list.txt",
+            extractPattern: #"(?:list)\s+(\S+\.txt)"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "merged.mp4",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["concat", "concatenate", "merge clips", "join videos"]
+      ),
+      CommandTemplate(
+        id: "ffmpeg_loop",
+        intents: [
+          "loop video N times", "ffmpeg stream_loop repeat video",
+          "make video repeat N times",
+        ],
+        command: "ffmpeg -stream_loop {N} -i {INPUT} -c copy {OUTPUT}",
+        slots: [
+          "N": SlotDefinition(type: .number, defaultValue: "2",
+            extractPattern: #"(\d+)\s*(?:times|x)"#),
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:loop|repeat)\s+(\S+\.\w+)"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "looped.mp4",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        negativeKeywords: ["from 1", "1 to", "for", "for loop", "for i", "seq"],
+        discriminators: ["loop video", "stream_loop", "repeat video"]
+      ),
+      CommandTemplate(
+        id: "ffmpeg_webp",
+        intents: [
+          "video to animated webp", "convert video to webp animation",
+          "ffmpeg webp output animation",
+        ],
+        command: "ffmpeg -i {INPUT} -vf 'fps={FPS},scale={WIDTH}:-1' -loop 0 {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:webp|animation)\s+(\S+\.\w+)"#),
+          "FPS": SlotDefinition(type: .number, defaultValue: "15"),
+          "WIDTH": SlotDefinition(type: .number, defaultValue: "480"),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "out.webp",
+            extractPattern: #"(?:to|as|save)\s+(\S+\.webp)"#),
+        ],
+        discriminators: ["webp", "animated webp", "webp animation"]
+      ),
+      CommandTemplate(
+        id: "ffmpeg_watermark",
+        intents: [
+          "add watermark to video", "overlay logo on video",
+          "ffmpeg watermark image overlay",
+        ],
+        command: "ffmpeg -i {INPUT} -i {LOGO} -filter_complex 'overlay=10:10' {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:watermark)\s+(\S+\.\w+)"#),
+          "LOGO": SlotDefinition(type: .path, defaultValue: "logo.png",
+            extractPattern: #"(?:logo|watermark)\s+(\S+\.png)"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "watermarked.mp4",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["watermark", "overlay logo", "video overlay"]
+      ),
+      CommandTemplate(
+        id: "ffmpeg_burn_subs",
+        intents: [
+          "burn subtitles into video", "hardsub video file",
+          "ffmpeg burn srt subtitles into video",
+        ],
+        command: "ffmpeg -i {INPUT} -vf 'subtitles={SUBS}' {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:burn|hardsub)\s+(\S+\.\w+)"#),
+          "SUBS": SlotDefinition(type: .path, defaultValue: "subs.srt",
+            extractPattern: #"(\S+\.srt)"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "subbed.mp4",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["burn", "hardsub", "burn subtitles", "subtitles burned"]
+      ),
+      CommandTemplate(
+        id: "ffmpeg_audio_mix",
+        intents: [
+          "mix two audio tracks", "ffmpeg amix combine audios",
+          "blend music with narration",
+        ],
+        command: "ffmpeg -i {A} -i {B} -filter_complex 'amix=inputs=2:duration=longest' {OUTPUT}",
+        slots: [
+          "A": SlotDefinition(type: .path, extractPattern: #"(?:mix|combine)\s+(\S+\.\w+)"#),
+          "B": SlotDefinition(type: .path, extractPattern: #"(?:with|and)\s+(\S+\.\w+)"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "mixed.m4a",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["amix", "mix audio", "combine audio", "blend audio"]
+      ),
+      CommandTemplate(
+        id: "ffmpeg_normalize_audio",
+        intents: [
+          "normalize audio loudness", "ffmpeg loudnorm",
+          "loudnorm broadcast standard",
+        ],
+        command: "ffmpeg -i {INPUT} -filter:a loudnorm {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:normalize|loudnorm)\s+(\S+\.\w+)"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "normalized.m4a",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["loudnorm", "normalize audio", "audio normalize"]
+      ),
+      CommandTemplate(
+        id: "ffmpeg_frames",
+        intents: [
+          "extract video frames as images", "ffmpeg frames to png",
+          "save video frames as png sequence",
+        ],
+        command: "ffmpeg -i {INPUT} -vf fps={FPS} {OUTPATTERN}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:frames|extract)\s+(\S+\.\w+)"#),
+          "FPS": SlotDefinition(type: .number, defaultValue: "1",
+            extractPattern: #"(\d+)\s*fps"#),
+          "OUTPATTERN": SlotDefinition(type: .string, defaultValue: "frame_%04d.png"),
+        ],
+        discriminators: ["frames", "frame_", "frames as png"]
+      ),
+      CommandTemplate(
+        id: "ffmpeg_thumbnail",
+        intents: [
+          "generate single thumbnail from video",
+          "ffmpeg one thumbnail at time offset",
+          "create poster image from video",
+        ],
+        command: "ffmpeg -ss {TIME} -i {INPUT} -vframes 1 {OUTPUT}",
+        slots: [
+          "TIME": SlotDefinition(type: .string, defaultValue: "00:00:01",
+            extractPattern: #"(?:at)\s+(\d+(?::\d+)*)"#),
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:thumbnail|poster)\s+(\S+\.\w+)"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "poster.jpg",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["poster", "thumbnail at", "single thumbnail"]
+      ),
+      CommandTemplate(
+        id: "ffmpeg_thumbnails_grid",
+        intents: [
+          "thumbnail grid from video", "ffmpeg tile thumbnails",
+          "contact sheet from video",
+        ],
+        command: "ffmpeg -i {INPUT} -vf 'fps=1/{INTERVAL},scale=320:-1,tile={TILE}' {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:grid|tile)\s+(\S+\.\w+)"#),
+          "INTERVAL": SlotDefinition(type: .number, defaultValue: "10"),
+          "TILE": SlotDefinition(type: .string, defaultValue: "4x3"),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "grid.jpg",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["thumbnail grid", "tile thumbnails", "contact sheet"]
+      ),
+      CommandTemplate(
+        id: "ffmpeg_screen_record",
+        intents: [
+          "record screen to video", "ffmpeg screen recording avfoundation",
+          "capture desktop to mp4",
+        ],
+        command: "ffmpeg -f avfoundation -framerate 30 -i 1 {OUTPUT}",
+        slots: [
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "screen.mp4",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        negativeKeywords: ["TXT", "DNS", "dig", "MX", "lookup", "domain", "record for"],
+        discriminators: ["screen record", "screen recording", "capture desktop", "avfoundation"]
+      ),
+      CommandTemplate(
+        id: "ffmpeg_duration",
+        intents: [
+          "show video duration only", "ffprobe print duration",
+          "get video length in seconds",
+        ],
+        command: "ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 {INPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:duration|length)\s+(?:of|for)?\s*(\S+)"#),
+        ],
+        discriminators: ["duration only", "length seconds", "video length", "show duration"]
+      ),
+      CommandTemplate(
+        id: "ffmpeg_mute",
+        intents: [
+          "remove audio from video", "mute video track",
+          "ffmpeg drop audio strip sound",
+        ],
+        command: "ffmpeg -i {INPUT} -an -c:v copy {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:mute|silence|remove)\s+(\S+\.\w+)"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "muted.mp4",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["mute", "remove audio", "silence video", "drop audio"]
+      ),
+      CommandTemplate(
+        id: "ffmpeg_speed",
+        intents: [
+          "speed up video", "slow down video",
+          "ffmpeg setpts speed change",
+        ],
+        command: "ffmpeg -i {INPUT} -filter:v 'setpts={PTS}*PTS' {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:speed|slow)\s+(\S+\.\w+)"#),
+          "PTS": SlotDefinition(type: .string, defaultValue: "0.5",
+            extractPattern: #"(?:by)\s+(\d+(?:\.\d+)?)"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "speed.mp4",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["speed up", "slow down", "setpts", "speed change"]
+      ),
+      CommandTemplate(
+        id: "ffmpeg_rotate_video",
+        intents: [
+          "rotate video", "ffmpeg transpose rotate video",
+          "turn video 90 degrees",
+        ],
+        command: "ffmpeg -i {INPUT} -vf 'transpose={N}' {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:rotate|turn)\s+(\S+\.\w+)"#),
+          "N": SlotDefinition(type: .number, defaultValue: "1",
+            extractPattern: #"(?:transpose)\s+(\d)"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "rotated.mp4",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["rotate video", "transpose", "video transpose"]
+      ),
+      CommandTemplate(
+        id: "ffmpeg_hls_segment",
+        intents: [
+          "segment video for hls streaming",
+          "ffmpeg hls m3u8 output",
+          "create hls playlist from video",
+        ],
+        command: "ffmpeg -i {INPUT} -codec: copy -hls_time {SEG} -hls_playlist_type vod {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:hls|segment)\s+(\S+\.\w+)"#),
+          "SEG": SlotDefinition(type: .number, defaultValue: "10"),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "playlist.m3u8",
+            extractPattern: #"(?:to|as|save)\s+(\S+\.m3u8)"#),
+        ],
+        discriminators: ["hls", "m3u8", "playlist", "hls streaming"]
+      ),
+      CommandTemplate(
+        id: "ffmpeg_dash_segment",
+        intents: [
+          "segment video for dash streaming",
+          "ffmpeg mpd dash output",
+          "create dash manifest from video",
+        ],
+        command: "ffmpeg -i {INPUT} -map 0 -codec:v libx264 -codec:a aac -f dash {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:dash|segment)\s+(\S+\.\w+)"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "manifest.mpd",
+            extractPattern: #"(?:to|as|save)\s+(\S+\.mpd)"#),
+        ],
+        discriminators: ["dash", "mpd", "dash manifest"]
+      ),
+      CommandTemplate(
+        id: "ffmpeg_change_resolution",
+        intents: [
+          "change video resolution preserving aspect",
+          "ffmpeg -2 keep aspect ratio scale",
+          "scale video preserving aspect",
+        ],
+        command: "ffmpeg -i {INPUT} -vf 'scale={W}:-2' {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:scale|resize)\s+(\S+\.\w+)"#),
+          "W": SlotDefinition(type: .number, defaultValue: "1280"),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "scaled.mp4",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["preserving aspect", "preserve aspect", "scale -2", "keep aspect"]
+      ),
+      CommandTemplate(
+        id: "ffmpeg_extract_subs",
+        intents: [
+          "extract subtitles from video",
+          "ffmpeg dump srt from mkv",
+          "rip subtitle track from container",
+        ],
+        command: "ffmpeg -i {INPUT} -map 0:s:0 {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:extract|dump|rip)\s+(\S+\.\w+)"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "subs.srt",
+            extractPattern: #"(?:to|as|save)\s+(\S+\.srt)"#),
+        ],
+        discriminators: ["extract subtitles", "dump srt", "rip subtitle"]
+      ),
+      CommandTemplate(
+        id: "ffmpeg_remux",
+        intents: [
+          "remux video container without re-encode",
+          "ffmpeg copy streams change container",
+          "switch container without transcoding",
+        ],
+        command: "ffmpeg -i {INPUT} -c copy {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:remux)\s+(\S+\.\w+)"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "out.mkv",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["remux", "copy streams", "switch container", "without transcoding"]
+      ),
+      CommandTemplate(
+        id: "ffmpeg_concat_demuxer",
+        intents: [
+          "concat videos via concat protocol",
+          "ffmpeg concat:protocol join mpegts",
+        ],
+        command: "ffmpeg -i 'concat:{LIST}' -c copy {OUTPUT}",
+        slots: [
+          "LIST": SlotDefinition(type: .string, defaultValue: "a.ts|b.ts"),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "joined.mp4",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["concat protocol", "concat:", "mpegts join"]
+      ),
+      CommandTemplate(
+        id: "ffmpeg_audio_only",
+        intents: [
+          "extract audio only stream copy",
+          "ffmpeg -vn -acodec copy audio rip",
+          "save just the audio track without re-encode",
+        ],
+        command: "ffmpeg -i {INPUT} -vn -acodec copy {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:rip|extract)\s+(\S+\.\w+)"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "audio.m4a",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["audio copy", "stream copy", "audio only", "without re-encode"]
+      ),
+      CommandTemplate(
+        id: "ffmpeg_volume",
+        intents: [
+          "change video volume level", "ffmpeg volume gain",
+          "boost or lower audio volume",
+        ],
+        command: "ffmpeg -i {INPUT} -filter:a 'volume={GAIN}' {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:volume|gain)\s+(\S+\.\w+)"#),
+          "GAIN": SlotDefinition(type: .string, defaultValue: "1.5",
+            extractPattern: #"(?:to|by)\s+(\d+(?:\.\d+)?|\d+dB)"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "voladj.mp4",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["volume gain", "audio volume", "boost volume", "lower volume"]
+      ),
+      CommandTemplate(
+        id: "ffmpeg_two_pass",
+        intents: [
+          "two pass encode video", "ffmpeg 2-pass libx264 fixed bitrate",
+          "encode video with bitrate constraint two passes",
+        ],
+        command: "ffmpeg -y -i {INPUT} -c:v libx264 -b:v {BITRATE} -pass 1 -an -f mp4 /dev/null && ffmpeg -i {INPUT} -c:v libx264 -b:v {BITRATE} -pass 2 {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:encode|2-pass|two pass)\s+(\S+\.\w+)"#),
+          "BITRATE": SlotDefinition(type: .string, defaultValue: "2M"),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "out.mp4",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        negativeKeywords: ["ln", "-s", "symlink", "source target"],
+        discriminators: ["two pass", "2-pass", "pass 1", "pass 2", "fixed bitrate"]
+      ),
+      CommandTemplate(
+        id: "ffmpeg_fade_in",
+        intents: [
+          "add fade in to video",
+          "ffmpeg fade=in fade in effect",
+        ],
+        command: "ffmpeg -i {INPUT} -vf 'fade=t=in:st=0:d={D}' {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:fade|fade-in)\s+(\S+\.\w+)"#),
+          "D": SlotDefinition(type: .number, defaultValue: "1"),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "fade.mp4",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["fade in", "fade=t=in", "fade-in"]
+      ),
+      CommandTemplate(
+        id: "ffmpeg_concat_filter",
+        intents: [
+          "concatenate clips using concat filter",
+          "ffmpeg concat filtergraph",
+        ],
+        command: "ffmpeg -i {A} -i {B} -filter_complex '[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[v][a]' -map '[v]' -map '[a]' {OUTPUT}",
+        slots: [
+          "A": SlotDefinition(type: .path, extractPattern: #"(?:concat|merge)\s+(\S+\.\w+)"#),
+          "B": SlotDefinition(type: .path, extractPattern: #"(?:and|with)\s+(\S+\.\w+)"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "joined.mp4",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["concat filter", "filtergraph concat"]
+      ),
+      CommandTemplate(
+        id: "ffmpeg_replace_audio",
+        intents: [
+          "replace audio track of video",
+          "ffmpeg swap audio in video",
+          "replace soundtrack with new audio",
+        ],
+        command: "ffmpeg -i {VIDEO} -i {AUDIO} -c:v copy -map 0:v:0 -map 1:a:0 -shortest {OUTPUT}",
+        slots: [
+          "VIDEO": SlotDefinition(type: .path, extractPattern: #"(?:replace|swap)\s+(\S+\.\w+)"#),
+          "AUDIO": SlotDefinition(type: .path, extractPattern: #"(?:with)\s+(\S+\.\w+)"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "newaudio.mp4",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["replace audio", "swap audio", "soundtrack", "new audio"]
+      ),
+      CommandTemplate(
+        id: "ffmpeg_extract_clip",
+        intents: [
+          "extract a clip between two timestamps",
+          "ffmpeg cut clip from start to end",
+          "snip a portion between times",
+        ],
+        command: "ffmpeg -ss {START} -to {END} -i {INPUT} -c copy {OUTPUT}",
+        slots: [
+          "START": SlotDefinition(type: .string, defaultValue: "00:00:00",
+            extractPattern: #"(?:from|start)\s+(\d[\d:.]+)"#),
+          "END": SlotDefinition(type: .string, defaultValue: "00:00:30",
+            extractPattern: #"(?:to|end)\s+(\d[\d:.]+)"#),
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:clip|snip|cut)\s+(\S+\.\w+)"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "clip.mp4",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["timestamps", "snip", "between two times", "from start to end"]
+      ),
+      CommandTemplate(
+        id: "ffmpeg_low_bitrate",
+        intents: [
+          "encode low bitrate video for messaging",
+          "ffmpeg compress video small file",
+          "make video tiny for sharing",
+        ],
+        command: "ffmpeg -i {INPUT} -c:v libx264 -crf 35 -preset slow -c:a aac -b:a 64k {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:compress|tiny)\s+(\S+\.\w+)"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "small.mp4",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["low bitrate", "small file", "tiny for sharing", "for messaging"]
+      ),
       CommandTemplate(
         id: "magick_convert",
         intents: [
@@ -3303,7 +4380,7 @@ public enum BuiltInTemplates {
           "change image format", "convert png to jpg",
           "convert jpg to png", "image format conversion",
         ],
-        command: "magick {INPUT} {OUTPUT}",
+        command: "{IM_CMD} {INPUT} {OUTPUT}",
         slots: [
           "INPUT": SlotDefinition(type: .path,
             extractPattern: #"(?:convert)\s+(\S+)"#),
@@ -3318,7 +4395,7 @@ public enum BuiltInTemplates {
           "imagemagick resize", "change image size",
           "make image smaller", "enlarge image",
         ],
-        command: "magick {INPUT} -resize {SIZE} {OUTPUT}",
+        command: "{IM_CMD} {INPUT} -resize {SIZE} {OUTPUT}",
         slots: [
           "INPUT": SlotDefinition(type: .path,
             extractPattern: #"(?:resize|scale|shrink)\s+(\S+)"#),
@@ -3335,11 +4412,361 @@ public enum BuiltInTemplates {
           "imagemagick identify", "image metadata",
           "what size is this image",
         ],
-        command: "magick identify -verbose {PATH}",
+        command: "{IM_CMD} identify -verbose {PATH}",
         slots: [
           "PATH": SlotDefinition(type: .path,
             extractPattern: #"(?:identify|info|details)\s+(?:of|for|about)?\s*(\S+)"#),
         ]
+      ),
+      // --- Wave 3: imagemagick deep coverage (incant) ---
+      CommandTemplate(
+        id: "magick_crop",
+        intents: [
+          "crop image", "crop a region from image", "imagemagick crop",
+          "cut out a section of image", "trim image to box",
+          "magick -crop region",
+        ],
+        command: "{IM_CMD} {INPUT} -crop {GEOMETRY} +repage {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:crop|cut)\s+(\S+\.\w+)"#),
+          "GEOMETRY": SlotDefinition(type: .string, defaultValue: "800x600+0+0",
+            extractPattern: #"(\d+x\d+(?:[+-]\d+)?(?:[+-]\d+)?)"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "cropped.png",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["crop", "region", "section", "cut out"]
+      ),
+      CommandTemplate(
+        id: "magick_rotate",
+        intents: [
+          "rotate image", "rotate image by degrees", "imagemagick rotate",
+          "turn image 90 degrees", "rotate by N degrees",
+        ],
+        command: "{IM_CMD} {INPUT} -rotate {DEGREES} {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:rotate)\s+(\S+\.\w+)"#),
+          "DEGREES": SlotDefinition(type: .number, defaultValue: "90",
+            extractPattern: #"(\d+)\s*(?:deg|degree)"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "rotated.png",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["rotate", "degrees", "turn"]
+      ),
+      CommandTemplate(
+        id: "magick_flip",
+        intents: [
+          "flip image vertically", "mirror image vertically",
+          "imagemagick flip", "flip top bottom",
+        ],
+        command: "{IM_CMD} {INPUT} -flip {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:flip|mirror)\s+(\S+\.\w+)"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "flipped.png",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["flip", "vertical", "vertically", "top to bottom"]
+      ),
+      CommandTemplate(
+        id: "magick_flop",
+        intents: [
+          "flop image horizontally", "mirror image horizontally",
+          "imagemagick flop", "flip left right",
+        ],
+        command: "{IM_CMD} {INPUT} -flop {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:flop|mirror)\s+(\S+\.\w+)"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "flopped.png",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["flop", "horizontal", "horizontally", "left to right"]
+      ),
+      CommandTemplate(
+        id: "magick_quality",
+        intents: [
+          "change image quality", "imagemagick quality compression",
+          "set jpeg quality", "compress image quality 85",
+        ],
+        command: "{IM_CMD} {INPUT} -quality {Q} {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:compress|quality)\s+(\S+\.\w+)"#),
+          "Q": SlotDefinition(type: .number, defaultValue: "85",
+            extractPattern: #"(?:quality)\s+(\d+)"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "compressed.jpg",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["quality", "jpeg quality", "compression level"]
+      ),
+      CommandTemplate(
+        id: "magick_strip",
+        intents: [
+          "strip image metadata", "remove exif data",
+          "imagemagick strip metadata", "clean image metadata",
+          "drop image metadata",
+        ],
+        command: "{IM_CMD} {INPUT} -strip {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:strip|metadata)\s+(\S+\.\w+)"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "stripped.jpg",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["strip metadata", "remove metadata", "exif", "clean metadata"]
+      ),
+      CommandTemplate(
+        id: "magick_compose",
+        intents: [
+          "composite two images", "imagemagick composite",
+          "overlay image on another",
+          "overlay X on Y",
+          "overlay logo on cover",
+          "overlay watermark on photo",
+          "combine two pictures",
+          "place one image on top of another",
+        ],
+        command: "{IM_CMD} composite {OVERLAY} {BASE} {OUTPUT}",
+        slots: [
+          "OVERLAY": SlotDefinition(type: .path,
+            extractPattern: #"(?:overlay|on top)\s+(\S+\.\w+)"#),
+          "BASE": SlotDefinition(type: .path,
+            extractPattern: #"(?:on|onto|over)\s+(\S+\.\w+)"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "composite.png",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["composite", "overlay on", "on top of", "combine images"]
+      ),
+      CommandTemplate(
+        id: "magick_montage",
+        intents: [
+          "montage of images", "imagemagick montage grid",
+          "tile multiple images into grid",
+          "combine images into contact sheet",
+        ],
+        command: "{IM_CMD} montage {PATTERN} -tile {TILE} -geometry {GEOMETRY} {OUTPUT}",
+        slots: [
+          "PATTERN": SlotDefinition(type: .glob, defaultValue: "*.jpg",
+            extractPattern: #"(\*\.\w+)"#),
+          "TILE": SlotDefinition(type: .string, defaultValue: "4x",
+            extractPattern: #"(\d+x\d*)"#),
+          "GEOMETRY": SlotDefinition(type: .string, defaultValue: "200x200+5+5"),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "montage.jpg",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["montage", "grid of", "contact sheet", "tile images"]
+      ),
+      CommandTemplate(
+        id: "magick_annotate",
+        intents: [
+          "annotate image with text", "add caption to image",
+          "imagemagick add text overlay",
+          "label image with caption",
+        ],
+        command: "{IM_CMD} {INPUT} -gravity south -pointsize 36 -annotate +0+10 '{TEXT}' {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:annotate|caption|label)\s+(\S+\.\w+)"#),
+          "TEXT": SlotDefinition(type: .string, defaultValue: "TEXT",
+            extractPattern: #"(?:text|caption|label)\s+['\"]([^'\"]+)['\"]"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "annotated.jpg",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["annotate", "caption", "label", "text overlay"]
+      ),
+      CommandTemplate(
+        id: "magick_blur",
+        intents: [
+          "blur image", "imagemagick blur",
+          "apply blur to image", "gaussian blur image",
+        ],
+        command: "{IM_CMD} {INPUT} -blur {SIGMA} {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:blur)\s+(\S+\.\w+)"#),
+          "SIGMA": SlotDefinition(type: .string, defaultValue: "0x8",
+            extractPattern: #"(?:blur)\s+(\d+x\d+|\d+\.\d+)"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "blurred.png",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["blur", "gaussian", "soften"]
+      ),
+      CommandTemplate(
+        id: "magick_sharpen",
+        intents: [
+          "sharpen image", "imagemagick sharpen",
+          "enhance image sharpness", "unsharp mask image",
+        ],
+        command: "{IM_CMD} {INPUT} -sharpen {SIGMA} {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:sharpen|enhance)\s+(\S+\.\w+)"#),
+          "SIGMA": SlotDefinition(type: .string, defaultValue: "0x4",
+            extractPattern: #"(\d+x\d+)"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "sharpened.png",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["sharpen", "unsharp", "enhance sharpness"]
+      ),
+      CommandTemplate(
+        id: "magick_grayscale",
+        intents: [
+          "convert image to grayscale", "imagemagick grayscale",
+          "make image black and white", "desaturate image",
+        ],
+        command: "{IM_CMD} {INPUT} -colorspace Gray {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:grayscale|gray|desaturate)\s+(\S+\.\w+)"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "gray.png",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["grayscale", "gray", "black and white", "desaturate"]
+      ),
+      CommandTemplate(
+        id: "magick_sepia",
+        intents: [
+          "apply sepia to image", "imagemagick sepia tone",
+          "make image sepia", "vintage sepia effect",
+        ],
+        command: "{IM_CMD} {INPUT} -sepia-tone {PCT} {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:sepia|vintage)\s+(\S+\.\w+)"#),
+          "PCT": SlotDefinition(type: .string, defaultValue: "80%",
+            extractPattern: #"(\d+%)"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "sepia.jpg",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["sepia", "vintage tone", "sepia effect"]
+      ),
+      CommandTemplate(
+        id: "magick_brightness",
+        intents: [
+          "change image brightness", "imagemagick brightness contrast",
+          "adjust image brightness",
+        ],
+        command: "{IM_CMD} {INPUT} -brightness-contrast {LEVELS} {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:brighten|brightness|adjust)\s+(\S+\.\w+)"#),
+          "LEVELS": SlotDefinition(type: .string, defaultValue: "20x10",
+            extractPattern: #"([+-]?\d+x[+-]?\d+)"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "bright.jpg",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["brightness", "brightness contrast", "brighten"]
+      ),
+      CommandTemplate(
+        id: "magick_contrast",
+        intents: [
+          "increase image contrast", "imagemagick contrast",
+          "boost image contrast",
+        ],
+        command: "{IM_CMD} {INPUT} -contrast {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:contrast|boost)\s+(\S+\.\w+)"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "contrast.jpg",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["contrast", "boost contrast"]
+      ),
+      CommandTemplate(
+        id: "magick_border",
+        intents: [
+          "add border to image", "imagemagick border",
+          "frame image with border",
+        ],
+        command: "{IM_CMD} {INPUT} -bordercolor {COLOR} -border {SIZE} {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:border|frame)\s+(\S+\.\w+)"#),
+          "COLOR": SlotDefinition(type: .string, defaultValue: "white",
+            extractPattern: #"(?:color)\s+(\w+|#[0-9a-fA-F]{6})"#),
+          "SIZE": SlotDefinition(type: .string, defaultValue: "10x10",
+            extractPattern: #"(\d+x\d+)"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "bordered.jpg",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["border", "frame", "add border"]
+      ),
+      CommandTemplate(
+        id: "magick_trim",
+        intents: [
+          "trim whitespace around image", "imagemagick trim",
+          "auto-crop empty borders",
+        ],
+        command: "{IM_CMD} {INPUT} -trim +repage {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:trim|auto-crop)\s+(\S+\.\w+)"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "trimmed.png",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["trim whitespace", "auto-crop", "trim empty"]
+      ),
+      CommandTemplate(
+        id: "magick_optimize",
+        intents: [
+          "optimize image for web", "imagemagick optimize",
+          "shrink image for web",
+        ],
+        command: "{IM_CMD} {INPUT} -strip -interlace Plane -gaussian-blur 0.05 -quality 85% {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:optimize)\s+(\S+\.\w+)"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "optimized.jpg",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["optimize", "for web", "shrink for web"]
+      ),
+      CommandTemplate(
+        id: "magick_exif",
+        intents: [
+          "show exif data", "imagemagick exif",
+          "read photo metadata", "image exif info",
+          "display exif tags", "view photo exif",
+        ],
+        command: "{IM_CMD} identify -format '%[EXIF:*]' {PATH}",
+        slots: [
+          "PATH": SlotDefinition(type: .path,
+            extractPattern: #"(?:exif|metadata|of|for)\s+(\S+)"#),
+        ],
+        negativeKeywords: ["remove", "strip", "drop", "clean"],
+        discriminators: ["show exif", "view exif", "display exif", "read metadata"]
+      ),
+      CommandTemplate(
+        id: "magick_batch_resize",
+        intents: [
+          "batch resize images", "imagemagick mogrify resize all",
+          "resize all images in a directory",
+          "shrink every jpg in folder",
+        ],
+        command: "mogrify -resize {SIZE} {PATTERN}",
+        slots: [
+          "SIZE": SlotDefinition(type: .string, defaultValue: "50%",
+            extractPattern: #"(\d+x\d+|\d+%)"#),
+          "PATTERN": SlotDefinition(type: .glob, defaultValue: "*.jpg",
+            extractPattern: #"(\*\.\w+)"#),
+        ],
+        discriminators: ["batch resize", "mogrify", "resize all"]
+      ),
+      CommandTemplate(
+        id: "magick_invert",
+        intents: [
+          "invert image colors", "imagemagick negate",
+          "make negative of image",
+        ],
+        command: "{IM_CMD} {INPUT} -negate {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:invert|negate|negative)\s+(\S+\.\w+)"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "inverted.png",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["invert colors", "negate", "negative image"]
+      ),
+      CommandTemplate(
+        id: "magick_thumbnail",
+        intents: [
+          "create thumbnail of image", "imagemagick thumbnail",
+          "generate small preview of image",
+        ],
+        command: "{IM_CMD} {INPUT} -thumbnail {SIZE} {OUTPUT}",
+        slots: [
+          "INPUT": SlotDefinition(type: .path, extractPattern: #"(?:thumbnail|preview)\s+(\S+\.\w+)"#),
+          "SIZE": SlotDefinition(type: .string, defaultValue: "200x200",
+            extractPattern: #"(\d+x\d+)"#),
+          "OUTPUT": SlotDefinition(type: .path, defaultValue: "thumb.jpg",
+            extractPattern: #"(?:to|as|save)\s+(\S+)"#),
+        ],
+        discriminators: ["thumbnail", "thumb", "small preview"]
       ),
       CommandTemplate(
         id: "sips_convert",
@@ -3558,6 +4985,500 @@ public enum BuiltInTemplates {
         ],
         negativeKeywords: ["git", "diff", "staged", "status", "commit", "branch"],
         discriminators: ["every", "seconds", "periodically", "repeat", "interval"]
+      ),
+    ]
+  )
+
+  // MARK: - Crypto (Wave 5: openssl deep coverage / incant)
+  // Templates use {OPENSSL_CMD} so macOS LibreSSL users transparently
+  // pick up Homebrew's OpenSSL 3 when installed. Templates that depend on
+  // OpenSSL 3-specific flags or LibreSSL-incompatible flags use
+  // requires:["capability:openssl.v3"] / requires:["flavor:openssl=openssl"]
+  // for soft demotion on incompatible profiles.
+
+  public static let crypto = TemplateCategory(
+    id: "crypto",
+    name: "Crypto",
+    description: "Cryptography and certificates: openssl x509 certificate, csr, private key, public key, hash, base64 encode decode, AES encryption, password generation, TLS connection inspection",
+    templates: [
+      CommandTemplate(
+        id: "random_password",
+        intents: [
+          "generate password", "random password", "create password",
+          "generate random string", "random token",
+          "generate secret", "secure password",
+        ],
+        command: "{OPENSSL_CMD} rand -base64 {LENGTH}",
+        slots: [
+          "LENGTH": SlotDefinition(type: .number, defaultValue: "32",
+            extractPattern: #"(\d+)\s*(?:char|byte|length)"#),
+        ]
+      ),
+      CommandTemplate(
+        id: "openssl_check",
+        intents: [
+          "check ssl certificate", "test ssl handshake",
+          "ssl handshake info", "check https endpoint",
+          "openssl s_client connect", "inspect ssl handshake",
+        ],
+        command: "{OPENSSL_CMD} s_client -connect {HOST}:443 -brief <<< ''",
+        slots: [
+          "HOST": SlotDefinition(type: .string,
+            extractPattern: #"(?:for|of|on)\s+(\S+)"#),
+        ],
+        discriminators: ["s_client", "handshake", "connect", "ssl handshake"]
+      ),
+      CommandTemplate(
+        id: "openssl_x509_text",
+        intents: [
+          "view certificate details", "openssl x509 -text",
+          "show full cert info", "decode pem certificate",
+          "print certificate fields",
+        ],
+        command: "{OPENSSL_CMD} x509 -in {CERT} -text -noout",
+        slots: [
+          "CERT": SlotDefinition(type: .path, defaultValue: "cert.pem",
+            extractPattern: #"(?:cert|in|file)\s+(\S+\.(?:pem|crt|cer))"#),
+        ],
+        discriminators: ["x509", "-text", "view cert", "decode pem"]
+      ),
+      CommandTemplate(
+        id: "openssl_x509_dates",
+        intents: [
+          "show certificate validity dates",
+          "openssl x509 -dates",
+          "cert valid from to",
+          "show notBefore notAfter",
+        ],
+        command: "{OPENSSL_CMD} x509 -in {CERT} -noout -dates",
+        slots: [
+          "CERT": SlotDefinition(type: .path, defaultValue: "cert.pem",
+            extractPattern: #"(?:cert|in|file)\s+(\S+\.(?:pem|crt|cer))"#),
+        ],
+        discriminators: ["validity dates", "notBefore", "notAfter", "expires", "-dates"]
+      ),
+      CommandTemplate(
+        id: "openssl_x509_subject",
+        intents: [
+          "show certificate subject",
+          "openssl x509 -subject",
+          "print cert subject",
+        ],
+        command: "{OPENSSL_CMD} x509 -in {CERT} -noout -subject",
+        slots: [
+          "CERT": SlotDefinition(type: .path, defaultValue: "cert.pem",
+            extractPattern: #"(?:cert|in|file)\s+(\S+\.(?:pem|crt|cer))"#),
+        ],
+        discriminators: ["subject", "-subject", "cert subject"]
+      ),
+      CommandTemplate(
+        id: "openssl_x509_issuer",
+        intents: [
+          "show certificate issuer",
+          "openssl x509 -issuer",
+          "print cert issuer",
+        ],
+        command: "{OPENSSL_CMD} x509 -in {CERT} -noout -issuer",
+        slots: [
+          "CERT": SlotDefinition(type: .path, defaultValue: "cert.pem",
+            extractPattern: #"(?:cert|in|file)\s+(\S+\.(?:pem|crt|cer))"#),
+        ],
+        discriminators: ["issuer", "-issuer", "ca that signed"]
+      ),
+      CommandTemplate(
+        id: "openssl_x509_fingerprint",
+        intents: [
+          "show certificate fingerprint",
+          "openssl x509 -fingerprint",
+          "sha256 fingerprint of cert",
+        ],
+        command: "{OPENSSL_CMD} x509 -in {CERT} -noout -fingerprint -sha256",
+        slots: [
+          "CERT": SlotDefinition(type: .path, defaultValue: "cert.pem",
+            extractPattern: #"(?:cert|in|file)\s+(\S+\.(?:pem|crt|cer))"#),
+        ],
+        discriminators: ["fingerprint", "-fingerprint", "sha256 of cert"]
+      ),
+      CommandTemplate(
+        id: "openssl_verify_chain",
+        intents: [
+          "verify certificate chain",
+          "openssl verify cert against ca",
+          "validate cert chain",
+        ],
+        command: "{OPENSSL_CMD} verify -CAfile {CA} {CERT}",
+        slots: [
+          "CA": SlotDefinition(type: .path, defaultValue: "ca.pem",
+            extractPattern: #"(?:against|ca|CAfile)\s+(\S+\.(?:pem|crt))"#),
+          "CERT": SlotDefinition(type: .path, defaultValue: "cert.pem",
+            extractPattern: #"(?:cert)\s+(\S+\.(?:pem|crt|cer))"#),
+        ],
+        discriminators: ["verify", "validate chain", "CAfile", "verify chain"]
+      ),
+      CommandTemplate(
+        id: "openssl_genrsa",
+        intents: [
+          "generate rsa private key",
+          "openssl genrsa 4096",
+          "create rsa key pair",
+        ],
+        command: "{OPENSSL_CMD} genrsa -out {KEY} {BITS}",
+        slots: [
+          "KEY": SlotDefinition(type: .path, defaultValue: "private.key",
+            extractPattern: #"(?:out|to|as)\s+(\S+\.key)"#),
+          "BITS": SlotDefinition(type: .number, defaultValue: "4096",
+            extractPattern: #"(\d{4})"#),
+        ],
+        discriminators: ["genrsa", "rsa private", "rsa key"]
+      ),
+      CommandTemplate(
+        id: "openssl_genec",
+        intents: [
+          "generate ec private key",
+          "openssl ecparam ec key",
+          "create elliptic curve key",
+        ],
+        command: "{OPENSSL_CMD} ecparam -name {CURVE} -genkey -noout -out {KEY}",
+        slots: [
+          "CURVE": SlotDefinition(type: .string, defaultValue: "prime256v1",
+            extractPattern: #"(?:curve|name)\s+(\S+)"#),
+          "KEY": SlotDefinition(type: .path, defaultValue: "ec.key",
+            extractPattern: #"(?:out|to|as)\s+(\S+\.key)"#),
+        ],
+        discriminators: ["ec key", "ecparam", "elliptic curve", "ecdsa"]
+      ),
+      CommandTemplate(
+        id: "openssl_gened25519",
+        intents: [
+          "generate ed25519 private key",
+          "openssl genpkey ed25519",
+          "create ed25519 key",
+        ],
+        command: "{OPENSSL_CMD} genpkey -algorithm ed25519 -out {KEY}",
+        slots: [
+          "KEY": SlotDefinition(type: .path, defaultValue: "ed25519.key",
+            extractPattern: #"(?:out|to|as)\s+(\S+\.key)"#),
+        ],
+        discriminators: ["ed25519", "edwards"],
+        requires: ["capability:openssl.v3"]
+      ),
+      CommandTemplate(
+        id: "openssl_pubkey",
+        intents: [
+          "extract public key from private key",
+          "openssl rsa -pubout",
+          "derive public from private",
+        ],
+        command: "{OPENSSL_CMD} pkey -in {KEY} -pubout -out {PUB}",
+        slots: [
+          "KEY": SlotDefinition(type: .path, defaultValue: "private.key",
+            extractPattern: #"(?:from|in)\s+(\S+\.key)"#),
+          "PUB": SlotDefinition(type: .path, defaultValue: "public.pem",
+            extractPattern: #"(?:out|to|as)\s+(\S+\.pem)"#),
+        ],
+        discriminators: ["public key", "pubout", "derive public", "extract pubkey"]
+      ),
+      CommandTemplate(
+        id: "openssl_csr_new",
+        intents: [
+          "create CSR certificate signing request",
+          "openssl req -new",
+          "generate csr from key",
+        ],
+        command: "{OPENSSL_CMD} req -new -key {KEY} -out {CSR} -subj '{SUBJ}'",
+        slots: [
+          "KEY": SlotDefinition(type: .path, defaultValue: "private.key",
+            extractPattern: #"(?:key)\s+(\S+\.key)"#),
+          "CSR": SlotDefinition(type: .path, defaultValue: "request.csr",
+            extractPattern: #"(?:out|as)\s+(\S+\.csr)"#),
+          "SUBJ": SlotDefinition(type: .string, defaultValue: "/CN=example.com",
+            extractPattern: #"(?:subj|subject)\s+(/[A-Z]+=[^\s]+(?:/[A-Z]+=[^\s]+)*)"#),
+        ],
+        discriminators: ["csr", "signing request", "req -new"]
+      ),
+      CommandTemplate(
+        id: "openssl_csr_view",
+        intents: [
+          "view csr details",
+          "openssl req -in -text",
+          "decode csr",
+        ],
+        command: "{OPENSSL_CMD} req -in {CSR} -noout -text",
+        slots: [
+          "CSR": SlotDefinition(type: .path, defaultValue: "request.csr",
+            extractPattern: #"(?:csr|in|file)\s+(\S+\.csr)"#),
+        ],
+        discriminators: ["view csr", "decode csr", "csr details"]
+      ),
+      CommandTemplate(
+        id: "openssl_self_signed",
+        intents: [
+          "create self-signed certificate",
+          "openssl req -x509",
+          "generate self signed cert",
+        ],
+        command: "{OPENSSL_CMD} req -x509 -newkey rsa:{BITS} -keyout {KEY} -out {CERT} -days {DAYS} -nodes -subj '{SUBJ}'",
+        slots: [
+          "BITS": SlotDefinition(type: .number, defaultValue: "4096"),
+          "KEY": SlotDefinition(type: .path, defaultValue: "key.pem"),
+          "CERT": SlotDefinition(type: .path, defaultValue: "cert.pem",
+            extractPattern: #"(?:out|cert)\s+(\S+\.(?:pem|crt))"#),
+          "DAYS": SlotDefinition(type: .number, defaultValue: "365",
+            extractPattern: #"(\d+)\s+days?"#),
+          "SUBJ": SlotDefinition(type: .string, defaultValue: "/CN=example.com",
+            extractPattern: #"(?:subj|subject)\s+(/[A-Z]+=[^\s]+(?:/[A-Z]+=[^\s]+)*)"#),
+        ],
+        discriminators: ["self-signed", "self signed", "req -x509"]
+      ),
+      CommandTemplate(
+        id: "openssl_p12_export",
+        intents: [
+          "export pkcs12 bundle",
+          "openssl pkcs12 -export",
+          "create p12 from cert and key",
+        ],
+        command: "{OPENSSL_CMD} pkcs12 -export -inkey {KEY} -in {CERT} -out {OUT}",
+        slots: [
+          "KEY": SlotDefinition(type: .path, defaultValue: "private.key",
+            extractPattern: #"(?:key)\s+(\S+\.key)"#),
+          "CERT": SlotDefinition(type: .path, defaultValue: "cert.pem",
+            extractPattern: #"(?:cert|in)\s+(\S+\.(?:pem|crt))"#),
+          "OUT": SlotDefinition(type: .path, defaultValue: "bundle.p12",
+            extractPattern: #"(?:out|as)\s+(\S+\.p12)"#),
+        ],
+        discriminators: ["pkcs12", "p12", "export bundle"]
+      ),
+      CommandTemplate(
+        id: "openssl_p12_import",
+        intents: [
+          "extract cert and key from pkcs12",
+          "openssl pkcs12 -in",
+          "import p12 contents",
+        ],
+        command: "{OPENSSL_CMD} pkcs12 -in {P12} -nodes -out {OUT}",
+        slots: [
+          "P12": SlotDefinition(type: .path, defaultValue: "bundle.p12",
+            extractPattern: #"(?:in|from)\s+(\S+\.p12)"#),
+          "OUT": SlotDefinition(type: .path, defaultValue: "out.pem",
+            extractPattern: #"(?:out|to)\s+(\S+\.pem)"#),
+        ],
+        discriminators: ["pkcs12 import", "p12 import", "extract from p12"]
+      ),
+      CommandTemplate(
+        id: "openssl_pem_to_der",
+        intents: [
+          "convert pem certificate to der",
+          "openssl x509 outform DER",
+          "pem to der",
+        ],
+        command: "{OPENSSL_CMD} x509 -in {PEM} -outform DER -out {DER}",
+        slots: [
+          "PEM": SlotDefinition(type: .path, defaultValue: "cert.pem",
+            extractPattern: #"(?:in|from)\s+(\S+\.pem)"#),
+          "DER": SlotDefinition(type: .path, defaultValue: "cert.der",
+            extractPattern: #"(?:out|to|as)\s+(\S+\.der)"#),
+        ],
+        discriminators: ["pem to der", "outform DER", "convert to der"]
+      ),
+      CommandTemplate(
+        id: "openssl_der_to_pem",
+        intents: [
+          "convert der certificate to pem",
+          "openssl x509 inform DER",
+          "der to pem",
+        ],
+        command: "{OPENSSL_CMD} x509 -inform DER -in {DER} -out {PEM}",
+        slots: [
+          "DER": SlotDefinition(type: .path, defaultValue: "cert.der",
+            extractPattern: #"(?:in|from)\s+(\S+\.der)"#),
+          "PEM": SlotDefinition(type: .path, defaultValue: "cert.pem",
+            extractPattern: #"(?:out|to|as)\s+(\S+\.pem)"#),
+        ],
+        discriminators: ["der to pem", "inform DER", "convert from der"]
+      ),
+      CommandTemplate(
+        id: "openssl_pkcs8",
+        intents: [
+          "convert key to pkcs8 format",
+          "openssl pkcs8 -topk8",
+          "convert rsa key to pkcs8",
+        ],
+        command: "{OPENSSL_CMD} pkcs8 -topk8 -in {KEY} -out {OUT} -nocrypt",
+        slots: [
+          "KEY": SlotDefinition(type: .path, defaultValue: "private.key",
+            extractPattern: #"(?:in|from)\s+(\S+\.(?:key|pem))"#),
+          "OUT": SlotDefinition(type: .path, defaultValue: "key.p8",
+            extractPattern: #"(?:out|as)\s+(\S+\.(?:p8|pem))"#),
+        ],
+        discriminators: ["pkcs8", "topk8", "p8 format"]
+      ),
+      CommandTemplate(
+        id: "openssl_sha256",
+        intents: [
+          "sha256 sum a file using openssl",
+          "openssl dgst -sha256",
+          "compute sha256 hash with openssl",
+        ],
+        command: "{OPENSSL_CMD} dgst -sha256 {FILE}",
+        slots: [
+          "FILE": SlotDefinition(type: .path,
+            extractPattern: #"(?:hash|sum|of|file)\s+(\S+)"#),
+        ],
+        discriminators: ["sha256", "dgst -sha256", "openssl sha256"]
+      ),
+      CommandTemplate(
+        id: "openssl_sha512",
+        intents: [
+          "sha512 sum a file using openssl",
+          "openssl dgst -sha512",
+          "compute sha512 hash with openssl",
+        ],
+        command: "{OPENSSL_CMD} dgst -sha512 {FILE}",
+        slots: [
+          "FILE": SlotDefinition(type: .path,
+            extractPattern: #"(?:hash|sum|of|file)\s+(\S+)"#),
+        ],
+        discriminators: ["sha512", "dgst -sha512"]
+      ),
+      CommandTemplate(
+        id: "openssl_hmac",
+        intents: [
+          "compute hmac of file",
+          "openssl dgst -hmac",
+          "hmac sha256 with secret",
+        ],
+        command: "{OPENSSL_CMD} dgst -sha256 -hmac '{SECRET}' {FILE}",
+        slots: [
+          "SECRET": SlotDefinition(type: .string, defaultValue: "SECRET",
+            extractPattern: #"(?:secret|key)\s+['\"]?(\w+)['\"]?"#),
+          "FILE": SlotDefinition(type: .path,
+            extractPattern: #"(?:hmac|of|file)\s+(\S+)"#),
+        ],
+        discriminators: ["hmac", "-hmac", "hmac sha256"]
+      ),
+      CommandTemplate(
+        id: "openssl_base64_encode",
+        intents: [
+          "base64 encode file with openssl",
+          "openssl enc -base64",
+          "encode binary to base64",
+        ],
+        command: "{OPENSSL_CMD} base64 -in {FILE} -out {OUT}",
+        slots: [
+          "FILE": SlotDefinition(type: .path,
+            extractPattern: #"(?:encode|in|of)\s+(\S+)"#),
+          "OUT": SlotDefinition(type: .path, defaultValue: "encoded.b64",
+            extractPattern: #"(?:out|to|as)\s+(\S+)"#),
+        ],
+        discriminators: ["base64 encode", "enc -base64", "to base64"]
+      ),
+      CommandTemplate(
+        id: "openssl_base64_decode",
+        intents: [
+          "base64 decode file with openssl",
+          "openssl base64 -d",
+          "decode base64 back to binary",
+        ],
+        command: "{OPENSSL_CMD} base64 -d -in {FILE} -out {OUT}",
+        slots: [
+          "FILE": SlotDefinition(type: .path,
+            extractPattern: #"(?:decode|in|from)\s+(\S+\.b64|\S+\.txt)"#),
+          "OUT": SlotDefinition(type: .path, defaultValue: "decoded.bin",
+            extractPattern: #"(?:out|to|as)\s+(\S+)"#),
+        ],
+        discriminators: ["base64 decode", "decode base64", "-base64 -d"]
+      ),
+      CommandTemplate(
+        id: "openssl_aes_encrypt",
+        intents: [
+          "aes encrypt file",
+          "openssl enc aes-256-cbc",
+          "encrypt file with aes",
+        ],
+        command: "{OPENSSL_CMD} enc -aes-256-cbc -salt -pbkdf2 -in {FILE} -out {OUT}",
+        slots: [
+          "FILE": SlotDefinition(type: .path,
+            extractPattern: #"(?:encrypt|in|of)\s+(\S+)"#),
+          "OUT": SlotDefinition(type: .path, defaultValue: "encrypted.enc",
+            extractPattern: #"(?:out|to|as)\s+(\S+)"#),
+        ],
+        discriminators: ["aes encrypt", "aes-256-cbc", "encrypt file"]
+      ),
+      CommandTemplate(
+        id: "openssl_aes_decrypt",
+        intents: [
+          "aes decrypt file",
+          "openssl enc -d aes-256-cbc",
+          "decrypt aes file",
+        ],
+        command: "{OPENSSL_CMD} enc -d -aes-256-cbc -pbkdf2 -in {FILE} -out {OUT}",
+        slots: [
+          "FILE": SlotDefinition(type: .path,
+            extractPattern: #"(?:decrypt|in|from)\s+(\S+)"#),
+          "OUT": SlotDefinition(type: .path, defaultValue: "decrypted.bin",
+            extractPattern: #"(?:out|to|as)\s+(\S+)"#),
+        ],
+        discriminators: ["aes decrypt", "decrypt file", "enc -d"]
+      ),
+      CommandTemplate(
+        id: "openssl_dhparam",
+        intents: [
+          "generate dh params for tls",
+          "openssl dhparam 2048",
+          "create diffie hellman params",
+        ],
+        command: "{OPENSSL_CMD} dhparam -out {OUT} {BITS}",
+        slots: [
+          "OUT": SlotDefinition(type: .path, defaultValue: "dhparam.pem",
+            extractPattern: #"(?:out|as)\s+(\S+\.pem)"#),
+          "BITS": SlotDefinition(type: .number, defaultValue: "2048",
+            extractPattern: #"(\d{4})"#),
+        ],
+        discriminators: ["dhparam", "diffie hellman", "dh params"]
+      ),
+      CommandTemplate(
+        id: "openssl_rand_hex",
+        intents: [
+          "generate random hex string",
+          "openssl rand -hex N",
+          "random hex token",
+        ],
+        command: "{OPENSSL_CMD} rand -hex {LENGTH}",
+        slots: [
+          "LENGTH": SlotDefinition(type: .number, defaultValue: "16",
+            extractPattern: #"(\d+)\s*(?:hex|bytes?)?"#),
+        ],
+        discriminators: ["random hex", "rand -hex", "hex token"]
+      ),
+      CommandTemplate(
+        id: "openssl_match_key",
+        intents: [
+          "verify key matches certificate",
+          "openssl modulus check key matches cert",
+          "match key to cert",
+        ],
+        command: "diff <({OPENSSL_CMD} x509 -in {CERT} -noout -modulus | md5) <({OPENSSL_CMD} rsa -in {KEY} -noout -modulus | md5)",
+        slots: [
+          "CERT": SlotDefinition(type: .path, defaultValue: "cert.pem",
+            extractPattern: #"(?:cert)\s+(\S+\.(?:pem|crt))"#),
+          "KEY": SlotDefinition(type: .path, defaultValue: "private.key",
+            extractPattern: #"(?:key)\s+(\S+\.key)"#),
+        ],
+        discriminators: ["modulus", "key matches", "match key", "matches cert"]
+      ),
+      CommandTemplate(
+        id: "openssl_pem_extract_chain",
+        intents: [
+          "split pem bundle into individual certs",
+          "openssl extract chain certs",
+          "separate concatenated certificates",
+        ],
+        command: "csplit -z -f cert- -b '%02d.pem' {BUNDLE} '/-----BEGIN CERTIFICATE-----/' '{*}'",
+        slots: [
+          "BUNDLE": SlotDefinition(type: .path, defaultValue: "chain.pem",
+            extractPattern: #"(?:bundle|chain|from|in)\s+(\S+\.pem)"#),
+        ],
+        discriminators: ["split bundle", "split pem", "separate certs", "extract chain"]
       ),
     ]
   )

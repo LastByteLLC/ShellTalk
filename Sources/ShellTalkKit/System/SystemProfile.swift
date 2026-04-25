@@ -33,6 +33,40 @@ public struct SystemProfile: Sendable {
   public let commandVersions: [String: String]
   public let gnuOverrides: [String: String]
   public let missingAlternatives: [String: String]
+  /// Tool flavor classifications: e.g., "tar"→"gnu"/"bsd", "openssl"→"openssl"/"libressl",
+  /// "magick"→"imagemagick7"/"imagemagick6". Empty when probe runs in fast mode.
+  public let commandFlavors: [String: String]
+  /// Boolean feature capabilities the matcher's `requires` predicates check against,
+  /// e.g., "tar.zstd", "openssl.legacy". Populated by the mid-path probe.
+  public let capabilities: Set<String>
+
+  public init(
+    os: OS,
+    arch: String,
+    osVersion: String,
+    shell: Shell,
+    packageManager: PackageManager,
+    availableCommands: Set<String>,
+    commandPaths: [String: String],
+    commandVersions: [String: String],
+    gnuOverrides: [String: String],
+    missingAlternatives: [String: String],
+    commandFlavors: [String: String] = [:],
+    capabilities: Set<String> = []
+  ) {
+    self.os = os
+    self.arch = arch
+    self.osVersion = osVersion
+    self.shell = shell
+    self.packageManager = packageManager
+    self.availableCommands = availableCommands
+    self.commandPaths = commandPaths
+    self.commandVersions = commandVersions
+    self.gnuOverrides = gnuOverrides
+    self.missingAlternatives = missingAlternatives
+    self.commandFlavors = commandFlavors
+    self.capabilities = capabilities
+  }
 
   /// Compact description for embedding in prompts or debug output (~50 tokens).
   public var summary: String {
@@ -85,7 +119,9 @@ extension SystemProfile {
       commandPaths: [:],
       commandVersions: [:],
       gnuOverrides: [:],
-      missingAlternatives: [:]
+      missingAlternatives: [:],
+      commandFlavors: [:],
+      capabilities: []
     )
     #else
     let os = detectOS()
@@ -101,6 +137,15 @@ extension SystemProfile {
     // Only do it when explicitly requested (e.g., --profile).
     let versions = full ? probeVersions(available: commands) : [:]
 
+    // Flavor + capability probe (mid-path, ~30ms). Skipped in fast mode
+    // unless explicitly opted in via SHELLTALK_PROBE=mid|full. The probe
+    // populates commandFlavors (tar→gnu/bsd, openssl→openssl/libressl,
+    // magick→imagemagick7/6) and capabilities (tar.zstd, openssl.legacy).
+    let probeMode = ProcessInfo.processInfo.environment["SHELLTALK_PROBE"] ?? "mid"
+    let (flavors, caps) = (full || probeMode == "mid" || probeMode == "full")
+      ? probeFlavors(available: commands)
+      : ([:], Set<String>())
+
     return SystemProfile(
       os: os,
       arch: arch,
@@ -111,9 +156,33 @@ extension SystemProfile {
       commandPaths: paths,
       commandVersions: versions,
       gnuOverrides: gnu,
-      missingAlternatives: missing
+      missingAlternatives: missing,
+      commandFlavors: flavors,
+      capabilities: caps
     )
     #endif
+  }
+
+  /// Check whether the profile satisfies a capability predicate. Predicates:
+  ///   - "command:NAME"            — `availableCommands` contains NAME
+  ///   - "flavor:TOOL=VALUE"       — `commandFlavors[TOOL]` equals VALUE
+  ///   - "capability:NAME" or NAME — `capabilities` contains NAME
+  /// Unrecognized predicates fail-soft (return true) to avoid surprise demotions.
+  public func satisfies(_ requirement: String) -> Bool {
+    if requirement.hasPrefix("command:") {
+      return availableCommands.contains(String(requirement.dropFirst("command:".count)))
+    }
+    if requirement.hasPrefix("flavor:") {
+      let body = String(requirement.dropFirst("flavor:".count))
+      let parts = body.split(separator: "=", maxSplits: 1).map(String.init)
+      guard parts.count == 2 else { return true }
+      return commandFlavors[parts[0]] == parts[1]
+    }
+    if requirement.hasPrefix("capability:") {
+      return capabilities.contains(String(requirement.dropFirst("capability:".count)))
+    }
+    // Bareword form is treated as a capability for ergonomics.
+    return capabilities.contains(requirement)
   }
 
   #if !os(WASI)
@@ -236,6 +305,89 @@ extension SystemProfile {
       }
     }
     return versions
+  }
+
+  // MARK: - Flavor + Capability Probing
+
+  /// Probe the 5 incant-target tools for vendor flavor and feature flags.
+  /// Each subprocess call is short (~5ms); the whole probe runs ~30ms cold.
+  ///
+  /// Populates:
+  ///   commandFlavors: ["tar": "gnu"|"bsd", "openssl": "openssl"|"libressl",
+  ///                    "magick": "imagemagick7", "convert": "imagemagick6"]
+  ///   capabilities  : ["tar.zstd", "tar.xz", "openssl.legacy", "magick.v7"]
+  private static func probeFlavors(available: Set<String>) -> ([String: String], Set<String>) {
+    var flavors: [String: String] = [:]
+    var caps = Set<String>()
+
+    // tar — GNU vs BSD, plus zstd/xz support
+    if available.contains("tar") {
+      if let v = run("tar", "--version") {
+        if v.lowercased().contains("gnu tar") {
+          flavors["tar"] = "gnu"
+        } else if v.lowercased().contains("bsdtar") || v.lowercased().contains("libarchive") {
+          flavors["tar"] = "bsd"
+        }
+        // zstd: GNU 1.31+ has --zstd; bsdtar uses -I zstd which works whenever
+        // the zstd binary is on PATH. xz is similar. We mark the capability
+        // present in either path so templates with `requires: capability:tar.zstd`
+        // fire correctly on both flavors.
+        if let help = run("tar", "--help"), help.contains("zstd") || help.contains("--zstd") {
+          caps.insert("tar.zstd")
+        } else if available.contains("zstd") {
+          // bsdtar without --zstd in help still supports `-I zstd`.
+          caps.insert("tar.zstd")
+        }
+        if let help = run("tar", "--help"), help.contains("xz") || help.contains("--xz") {
+          caps.insert("tar.xz")
+        } else if available.contains("xz") {
+          caps.insert("tar.xz")
+        }
+      }
+    }
+
+    // openssl — OpenSSL vs LibreSSL, major version
+    if available.contains("openssl") {
+      if let v = run("openssl", "version") {
+        if v.lowercased().contains("libressl") {
+          flavors["openssl"] = "libressl"
+        } else if v.lowercased().contains("openssl") {
+          flavors["openssl"] = "openssl"
+          // OpenSSL 3+ has the legacy provider for old ciphers.
+          if v.contains("OpenSSL 3") || v.contains("OpenSSL 4") {
+            caps.insert("openssl.legacy")
+            caps.insert("openssl.v3")
+          } else if v.contains("OpenSSL 1") {
+            caps.insert("openssl.v1")
+          }
+        }
+      }
+    }
+
+    // ImageMagick — v7 has `magick`; v6 has `convert` only.
+    if available.contains("magick") {
+      if let v = run("magick", "-version"), v.contains("ImageMagick") {
+        flavors["magick"] = "imagemagick7"
+        caps.insert("magick.v7")
+      }
+    } else if available.contains("convert") {
+      // Distinguish ImageMagick v6 `convert` from coreutils-style `convert`.
+      if let v = run("convert", "-version"), v.contains("ImageMagick") {
+        flavors["convert"] = "imagemagick6"
+        caps.insert("magick.v6")
+      }
+    }
+
+    // ffmpeg — distinguish ffmpeg from avconv (the latter is mostly extinct
+    // post-2018 but Debian historically symlinked it).
+    if available.contains("ffmpeg") {
+      flavors["ffmpeg"] = "ffmpeg"
+    } else if available.contains("avconv") {
+      flavors["ffmpeg"] = "avconv"
+    }
+
+    // curl — version-stable; no flavor variants worth gating on in V1.
+    return (flavors, caps)
   }
 
   // MARK: - GNU Override Detection

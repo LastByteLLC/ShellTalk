@@ -7,7 +7,7 @@ struct TemplateStoreTests {
   @Test("Built-in store has templates")
   func builtInHasTemplates() {
     let store = TemplateStore.builtIn()
-    #expect(store.categories.count == 12)
+    #expect(store.categories.count == 13)
     #expect(store.templateCount > 150)
   }
 
