@@ -93,7 +93,22 @@ struct ShellTalk: ParsableCommand {
 
     // Main pipeline
     guard let result = pipeline.process(text) else {
-      printError("No matching command found for: \(text)")
+      printError("No confident match for: \(text)")
+      // R3: surface the matcher's top-K rejected candidates as "did you
+      // mean?" suggestions. Transforms a silent failure into a prompt
+      // the user can actually act on.
+      let suggestions = pipeline.suggestions(for: text, limit: 3)
+      if !suggestions.isEmpty {
+        print("")
+        print("Did you mean:")
+        for (i, s) in suggestions.enumerated() {
+          let safety = safetyIcon(s.validation?.safetyLevel)
+          print(
+            "  \(i + 1). \(safety) \(s.command)"
+              + "  (\(s.templateId), conf=\(String(format: "%.2f", s.confidence)))"
+          )
+        }
+      }
       throw ExitCode.failure
     }
 

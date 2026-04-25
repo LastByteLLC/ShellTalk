@@ -133,22 +133,48 @@ public final class IntentMatcher: Sendable {
 
     // Try typo correction — may produce a better match.
     //
-    // Hallucination guard: if the ORIGINAL query matched nothing at all
-    // (result == nil) AND the query has multiple unrecognized tokens AND
-    // the correction produced only a weak match, it's almost certainly
-    // an off-topic / conversational query that correction "rescued" by
-    // mangling words into anchor words — "what is the meaning of life"
-    // becoming "what is the merging of line" becoming `for_lines` is the
-    // canonical case. Prefer nil over a confident-looking wrong answer.
+    // Two guards:
     //
-    // The guard intentionally allows:
-    //   • Single-typo queries ("doker ps"): suspectCount == 1 → accept
-    //   • Multi-typo queries with strong corrections ("delet my sourc
-    //     fiels"): the corrected match will land at high confidence
-    //     (≥ 3.5), so we accept it
-    //   • Queries where the original partially matched: result != nil
-    //     means the uncorrected query had *some* signal
+    // 1. Preserve confident originals. If the uncorrected query already
+    //    matched at HIGH confidence (>= 0.9 — i.e., authoritative phrase,
+    //    exact match, or strong command-prefix), typo correction must
+    //    not override it. Running correction in that case turns good
+    //    matches into bad ones: "find files not ending in .log" picks
+    //    up find_by_name via an authoritative phrase override, but
+    //    correction mangles "ending" into another anchor word and the
+    //    re-match lands on ls_files.
+    //
+    // 2. Hallucination guard. If the ORIGINAL query matched nothing at
+    //    all (result == nil) AND the query has multiple unrecognized
+    //    tokens AND the correction produced only a weak match, it's
+    //    almost certainly an off-topic / conversational query that
+    //    correction "rescued" by mangling words into anchor words —
+    //    "what is the meaning of life" becoming "merging of line"
+    //    becoming `for_lines` is the canonical case. Prefer nil over
+    //    a confident-looking wrong answer.
+    //
+    // Allowed correction paths:
+    //   • Original nil, single-typo query ("doker ps"): correction kicks in
+    //   • Original nil, multi-typo with strong correction ("delet my sourc
+    //     fiels" → rm_file at high confidence): accepted via the 3.5 floor
+    //   • Original LOW confidence (< 0.9) and correction materially
+    //     better: rescue path
     if likelyHasTypos, let corrected = tryTypoCorrection(query, entities: entities) {
+      // Preserve curated-path originals. Authoritative phrase, exact
+      // match, and strong command-prefix all set categoryScore == 1.0;
+      // BM25 matches have varied categoryScores. A curated original
+      // represents developer-encoded intent mapping and must NOT be
+      // clobbered by typo correction. Without this, "find files not
+      // ending in .log" (authoritative phrase → find_by_name) gets
+      // mangled: "ending" isn't an anchor, correction rewrites the
+      // query, and the re-match loses the curated routing.
+      //
+      // BM25 originals fall through to the old correction path —
+      // correcting typos in a BM25-only original is usually a win
+      // ("doker ps" → docker_ps, "git comit" → git_commit).
+      if let original = result, original.categoryScore == 1.0 {
+        return original
+      }
       if result == nil,
          suspectTokenCount(query, entities: entities) >= 2,
          corrected.confidence < 3.5 {

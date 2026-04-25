@@ -219,6 +219,25 @@ public final class STMPipeline: Sendable {
     )
   }
 
+  /// "Did you mean?" suggestions for a query that `process(_:)` couldn't
+  /// confidently resolve. Returns the top-K candidates the matcher considered,
+  /// ranked by BM25/TF-IDF score, WITHOUT the confidence threshold gate that
+  /// `process(_:)` applies. Useful for CLI / UI fallback:
+  ///
+  ///   if let result = pipe.process(query) {
+  ///     // show confident answer
+  ///   } else {
+  ///     for s in pipe.suggestions(for: query) {
+  ///       print("Did you mean: \(s.command)")
+  ///     }
+  ///   }
+  ///
+  /// Identical to `processWithAlternatives(_:n:)`; this alias exists because
+  /// callers reach for it precisely when `process(_:)` returned nil.
+  public func suggestions(for query: String, limit: Int = 3) -> [PipelineResult] {
+    processWithAlternatives(query, n: limit)
+  }
+
   /// Process a query and return top-N alternatives.
   public func processWithAlternatives(_ query: String, n: Int = 3) -> [PipelineResult] {
     let entities = recognizer.recognize(query)

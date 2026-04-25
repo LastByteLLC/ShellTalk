@@ -288,6 +288,43 @@ public final class TemplateStore: Sendable {
       // BM25 IDF and were regressing "delete temp.txt" on macOS).
       "old log files": "rm_file",
       "old log": "rm_file",
+      // R1: negation patterns. Current BM25 treats negation words as
+      // stopwords or ignores their semantics, so "find files NOT ending
+      // in .log" gets lexically-matched to grep_search via the ".log"
+      // token. These overrides route negation intents to find_by_name,
+      // which supports `-not -name` natively. Narrow 2-3-gram phrases
+      // that are unambiguous about the user's intent.
+      "not ending in": "find_by_name",
+      "files not ending": "find_by_name",
+      "everything except": "find_by_name",
+      "without merges": "git_log_no_merges",
+      "no merges": "git_log_no_merges",
+      // R2: "between DATE and DATE" queries need routing to date-range
+      // templates. 2-grams like "commits between" are too generic —
+      // they clobber "commits between v1.0 and v2.0" (version range)
+      // and "files between 10MB and 100MB" (size range). Use 3-grams
+      // that explicitly anchor the following token as date-like
+      // (yesterday, today, weekday, or ISO year prefix) to route only
+      // the true date-range intent.
+      "commits between yesterday": "git_log_date_range",
+      "commits between today": "git_log_date_range",
+      "commits between monday": "git_log_date_range",
+      "commits between tuesday": "git_log_date_range",
+      "commits between wednesday": "git_log_date_range",
+      "commits between thursday": "git_log_date_range",
+      "commits between friday": "git_log_date_range",
+      "commits between saturday": "git_log_date_range",
+      "commits between sunday": "git_log_date_range",
+      "files between yesterday": "find_mtime_range",
+      "files between today": "find_mtime_range",
+      "files between 2020": "find_mtime_range",
+      "files between 2021": "find_mtime_range",
+      "files between 2022": "find_mtime_range",
+      "files between 2023": "find_mtime_range",
+      "files between 2024": "find_mtime_range",
+      "files between 2025": "find_mtime_range",
+      "files between 2026": "find_mtime_range",
+      "files between 2027": "find_mtime_range",
     ]
     for (phrase, templateId) in authoritativeOverrides {
       phrases[phrase] = templateId

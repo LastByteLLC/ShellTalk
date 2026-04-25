@@ -243,8 +243,17 @@ jobs:
             -Xswiftc -Xfrontend -Xswiftc -disable-availability-checking
 
       - name: Optimize WASM binary
+        # Ubuntu 24.04 apt ships binaryen 108, which predates --strip-eh
+        # (added in binaryen 116, Jan 2024). Pull a pinned upstream release
+        # for wasm-opt; wabt and brotli from apt are current enough.
         run: |
-          sudo apt-get install -y -qq binaryen wabt brotli
+          sudo apt-get install -y -qq wabt brotli
+          BINARYEN_VER=version_119
+          curl -fsSL -o /tmp/binaryen.tar.gz \
+            "https://github.com/WebAssembly/binaryen/releases/download/${BINARYEN_VER}/binaryen-${BINARYEN_VER}-x86_64-linux.tar.gz"
+          sudo tar -xzf /tmp/binaryen.tar.gz -C /opt
+          export PATH="/opt/binaryen-${BINARYEN_VER}/bin:$PATH"
+          wasm-opt --version
           wasm-opt -Oz \
             --strip-debug --strip-producers --strip-eh --strip-target-features \
             --vacuum --dae-optimizing --converge \
