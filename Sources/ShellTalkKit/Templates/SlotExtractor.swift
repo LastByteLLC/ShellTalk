@@ -67,6 +67,17 @@ public struct SlotExtractor: Sendable {
         continue
       }
 
+      // Strategy 3.5 (A3): Glob synthesis from natural-language quantifiers.
+      // For .glob slots that nothing else filled, try to derive a `*.ext`
+      // pattern from queries like "all PNG", "every JPEG", "the mp4 files".
+      // This converts "convert all png to jpg" from a no-confident-match
+      // (after the A1 placeholder guard) into a runnable `magick *.png ...`.
+      if definition.type == .glob,
+         let glob = FileExtensionAliases.synthesizeGlob(from: query) {
+        extracted[name] = glob
+        continue
+      }
+
       // Fallback: default value
       if let defaultValue = definition.defaultValue {
         extracted[name] = defaultValue
@@ -85,8 +96,116 @@ public struct SlotExtractor: Sendable {
       }
     }
 
+    // A2: Slot-name-aware validation. Some slots are too domain-specific
+    // for SlotType to capture — COLOR must be a color, BITRATE must be
+    // a digit+unit, DAYS must be in a sane range, etc. When a value
+    // fails its name-specific validator we fall back to the slot's
+    // defaultValue (or drop it). This prevents emissions like
+    // `-bordercolor border` (the word "border" bound to COLOR) and
+    // `-days 4096` (the RSA bit count bound to DAYS).
+    for (name, value) in extracted {
+      guard let definition = slots[name] else { continue }
+      if !Self.passesNameValidation(name: name, value: value) {
+        if let defaultValue = definition.defaultValue {
+          extracted[name] = defaultValue
+        } else {
+          extracted.removeValue(forKey: name)
+        }
+      }
+    }
+
     return extracted
   }
+
+  /// Slot-name-specific validators. Catches structurally-wrong bindings
+  /// that SlotType-level checks would miss. Returns true if the value is
+  /// acceptable for a slot of this name. Names matched here are uppercase
+  /// canonical forms used in templates (e.g., "COLOR", "BITRATE", "DAYS").
+  static func passesNameValidation(name: String, value: String) -> Bool {
+    let v = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    if v.isEmpty { return true }  // empty values handled elsewhere
+    switch name {
+    case "COLOR":
+      // Named CSS-style color, hex (#rrggbb or #rgb), or rgba(...).
+      let lower = v.lowercased()
+      if Self.namedColors.contains(lower) { return true }
+      if v.range(of: #"^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$"#, options: .regularExpression) != nil { return true }
+      if v.range(of: #"^rgba?\("#, options: .regularExpression) != nil { return true }
+      return false
+    case "BITRATE":
+      // 5M, 192k, 1500, 5000kbps, 5Mbps
+      return v.range(of: #"^\d+[KkMmGg]?[Bb]?(?:ps)?$"#, options: .regularExpression) != nil
+    case "DAYS":
+      // 1 day to ~30 years
+      guard let n = Int(v) else { return false }
+      return n >= 1 && n <= 11000
+    case "BITS":
+      // RSA key sizes: 1024, 2048, 3072, 4096, 8192
+      guard let n = Int(v) else { return false }
+      return [512, 1024, 2048, 3072, 4096, 6144, 8192].contains(n)
+    case "DEGREES":
+      guard let n = Int(v) else { return false }
+      return n >= -360 && n <= 360
+    case "CRF":
+      guard let n = Int(v) else { return false }
+      return n >= 0 && n <= 51
+    case "Q":
+      guard let n = Int(v) else { return false }
+      return n >= 1 && n <= 100
+    case "FPS":
+      guard let n = Int(v) else { return false }
+      return n >= 1 && n <= 240
+    case "SECS":
+      guard let n = Int(v) else { return false }
+      return n >= 1 && n <= 86400
+    case "PORT":
+      guard let n = Int(v) else { return false }
+      return n >= 1 && n <= 65535
+    case "SIZE":
+      // SIZE is overloaded: imagemagick dimensions (200x200, 50%, 800x600+0+0)
+      // AND filesystem size (100M, 1G, 512K) AND raw counts (1024).
+      // Accept any of these; reject only random words like "JPEGs" or "border".
+      if v.range(
+        of: #"^\d+(x\d+){0,2}([+-]\d+){0,2}%?$|^\d+%$"#,
+        options: .regularExpression) != nil { return true }
+      // Filesystem size form
+      if v.range(
+        of: #"^\d+[KkMmGgTt]?[Bb]?$"#,
+        options: .regularExpression) != nil { return true }
+      return false
+    case "GEOMETRY", "TILE", "DIMENSIONS":
+      // ImageMagick geometry: NxM, NxMxK, N%, AxB+C+D
+      return v.range(
+        of: #"^\d+(x\d+){0,2}([+-]\d+){0,2}%?$|^\d+%$"#,
+        options: .regularExpression) != nil
+    case "TIME", "START", "END":
+      // HH:MM:SS, MM:SS, SS, or N+suffix (30s, 1m30, 1:30)
+      return v.range(
+        of: #"^\d+[:.][\d:.]+|^\d+(\.\d+)?$|^\d+(s|m|h|sec|min|hr)$"#,
+        options: .regularExpression) != nil
+    case "SUBJ":
+      // OpenSSL DN format: /CN=foo/O=bar (or simpler /CN=foo).
+      return v.hasPrefix("/") && v.contains("=")
+    case "N":
+      // Generic small integer (strip-components, transpose mode, etc.).
+      guard let n = Int(v) else { return false }
+      return n >= 0 && n <= 100
+    case "LENGTH":
+      // openssl rand length / similar
+      guard let n = Int(v) else { return false }
+      return n >= 1 && n <= 1024
+    default:
+      return true  // Unknown slot names pass through
+    }
+  }
+
+  /// Common color names accepted by ImageMagick / CSS / X11.
+  static let namedColors: Set<String> = [
+    "white", "black", "red", "green", "blue", "yellow", "cyan", "magenta",
+    "gray", "grey", "orange", "purple", "pink", "brown", "transparent",
+    "none", "lightgray", "lightgrey", "darkgray", "darkgrey", "navy",
+    "teal", "olive", "maroon", "silver", "gold", "violet", "indigo",
+  ]
 
   // MARK: - Noise Detection
 
@@ -458,11 +577,76 @@ public struct SlotExtractor: Sendable {
       cleaned = FileExtensionAliases.resolve(cleaned)
     case .relativeDays:
       cleaned = resolveRelativeDays(cleaned)
+    case .number:
+      cleaned = Self.normalizeNumericUnit(cleaned)
+    case .fileSize:
+      cleaned = Self.normalizeFileSize(cleaned)
     default:
       break
     }
 
     return cleaned
+  }
+
+  /// A4: Normalize natural-language numeric forms into bare integers.
+  /// "4px"→"4", "10sec"→"10", "30min"→"30", "2x"→"2", "180°"→"180".
+  /// Pure-digit values pass through unchanged.
+  static func normalizeNumericUnit(_ value: String) -> String {
+    let trimmed = value.trimmingCharacters(in: .whitespaces)
+    if trimmed.isEmpty { return trimmed }
+    if Int(trimmed) != nil { return trimmed }
+    // Strip a known unit suffix.
+    let suffixes = [
+      "px", "pixels", "pixel",
+      "sec", "secs", "seconds", "second", "s",
+      "min", "mins", "minutes", "minute",
+      "hr", "hrs", "hours", "hour", "h",
+      "ms", "millis",
+      "x",
+      "°", "deg", "degrees", "degree",
+      "%",
+    ]
+    let lower = trimmed.lowercased()
+    for suffix in suffixes where lower.hasSuffix(suffix) {
+      let stripped = String(trimmed.dropLast(suffix.count)).trimmingCharacters(in: .whitespaces)
+      if Int(stripped) != nil { return stripped }
+    }
+    return trimmed
+  }
+
+  /// A4: Normalize file-size expressions to ShellTalk's canonical form.
+  /// "10MB"→"10M", "5 gigabytes"→"5G", "100kb"→"100K". Unrecognized
+  /// values pass through; the .fileSize isNoiseValue gate catches junk.
+  static func normalizeFileSize(_ value: String) -> String {
+    let trimmed = value.trimmingCharacters(in: .whitespaces)
+    let lower = trimmed.lowercased().replacingOccurrences(of: " ", with: "")
+    // Match digits then unit.
+    let pattern = #"^(\d+)(b|byte|bytes|k|kb|kilobyte|kilobytes|m|mb|megabyte|megabytes|g|gb|gigabyte|gigabytes|t|tb|terabyte|terabytes)?$"#
+    guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+          let match = regex.firstMatch(in: lower, range: NSRange(lower.startIndex..., in: lower)),
+          match.numberOfRanges >= 2,
+          let numRange = Range(match.range(at: 1), in: lower)
+    else { return trimmed }
+    let num = String(lower[numRange])
+    let unitRange = match.range(at: 2)
+    let unit: String
+    if unitRange.location == NSNotFound {
+      unit = ""
+    } else if let r = Range(unitRange, in: lower) {
+      unit = String(lower[r])
+    } else {
+      unit = ""
+    }
+    let canonical: String
+    switch unit {
+    case "k", "kb", "kilobyte", "kilobytes": canonical = "K"
+    case "m", "mb", "megabyte", "megabytes": canonical = "M"
+    case "g", "gb", "gigabyte", "gigabytes": canonical = "G"
+    case "t", "tb", "terabyte", "terabytes": canonical = "T"
+    case "b", "byte", "bytes", "": canonical = ""
+    default: canonical = unit.uppercased()
+    }
+    return num + canonical
   }
 
   // MARK: - Slot Type → Entity Type Mapping

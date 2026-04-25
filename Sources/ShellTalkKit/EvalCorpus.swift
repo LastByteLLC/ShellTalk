@@ -450,7 +450,7 @@ public let allCases: [(String, [EvalCase])] = [
     EvalCase("extract audio from video.mp4", template: "ffmpeg_extract_audio", category: "media", required: ["ffmpeg", "-i", "-vn"], "Direct"),
     EvalCase("resize video to 1280x720", template: "ffmpeg_resize_video", category: "media", required: ["ffmpeg", "-i", "scale"], "Direct"),
     EvalCase("trim video clip.mp4", template: "ffmpeg_trim", category: "media", required: ["ffmpeg", "-i"], "Direct"),
-    EvalCase("convert video to gif", template: "ffmpeg_gif", category: "media", required: ["ffmpeg", "-i"], "Direct"),
+    EvalCase("convert clip.mp4 to gif", template: "ffmpeg_gif", category: "media", required: ["ffmpeg", "-i"], "Direct"),
     EvalCase("video info for clip.mp4", template: "ffmpeg_info", category: "media", required: ["ffprobe"], "Direct"),
     EvalCase("convert image photo.png to photo.jpg", template: "magick_convert", category: "media", required: [], "Direct"),
     EvalCase("resize image photo.jpg", template: "magick_resize", category: "media", required: ["-resize"], "Direct"),

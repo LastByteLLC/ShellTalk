@@ -328,6 +328,142 @@ struct STMAccuracyTests {
     }
   }
 
+  // MARK: - Incant validation gates (Categories A & B)
+
+  @Suite("IncantValidation")
+  struct IncantValidation {
+    /// A1: incant-era templates (media, crypto, tar_*, curl_*, etc.) MUST
+    /// NOT emit commands containing literal `{UPPERCASE}` placeholders.
+    /// If the user's query lacks the required entity, return nil — never
+    /// `magick {INPUT} {OUTPUT}`.
+    @Test("Incant queries without filenames return nil, not unfilled placeholders")
+    func incantPlaceholderGuard() {
+      // Genuinely under-specified queries — no concrete file paths.
+      let underspecified = [
+        "convert all png to jpg",
+        "make a thumbnail of every photo at 200x200",
+        "encode video to h265",
+      ]
+      for q in underspecified {
+        let r = pipeline.process(q)
+        if let r {
+          // Either nil OR a runnable command — never a literal {X} placeholder.
+          let hasPlaceholder = r.command.range(
+            of: #"\{[A-Z][A-Z0-9_]+\}"#, options: .regularExpression) != nil
+          #expect(!hasPlaceholder,
+            "Query '\(q)' produced unfilled placeholder: \(r.command)")
+        }
+      }
+    }
+
+    /// A1: queries that DO supply concrete entities must produce
+    /// runnable commands (no `{X}` literals).
+    @Test("Incant queries with filenames produce runnable commands")
+    func incantConcreteQueries() {
+      let cases: [(String, String)] = [
+        ("rotate IMG_1234.jpg 90 degrees", "magick"),
+        ("convert video.mov to video.mp4", "ffmpeg"),
+        ("verify cert.pem against ca.pem", "openssl"),
+        ("crop region 800x600+0+0 from photo.jpg", "magick"),
+        ("encode video.mov to h264 with crf 23", "libx264"),
+      ]
+      for (q, mustContain) in cases {
+        let r = pipeline.process(q)
+        #expect(r != nil, "Expected match for: \(q)")
+        if let r {
+          let hasPlaceholder = r.command.range(
+            of: #"\{[A-Z][A-Z0-9_]+\}"#, options: .regularExpression) != nil
+          #expect(!hasPlaceholder,
+            "Query '\(q)' produced unfilled placeholder: \(r.command)")
+          #expect(r.command.contains(mustContain),
+            "Query '\(q)' missing '\(mustContain)' in output: \(r.command)")
+        }
+      }
+    }
+
+    /// A2: name-aware slot validators reject structurally-wrong bindings.
+    /// The query "border" being captured as a COLOR slot value, "h265"
+    /// as a BITRATE, "4096" (RSA bits) as DAYS — all of these should
+    /// either fall through to the slot's default or be filtered out.
+    @Test("Slot-name validators reject structurally-wrong values")
+    func slotNameValidation() {
+      // COLOR must accept color names / hex; reject random words.
+      #expect(SlotExtractor.passesNameValidation(name: "COLOR", value: "white"))
+      #expect(SlotExtractor.passesNameValidation(name: "COLOR", value: "#ff0000"))
+      #expect(!SlotExtractor.passesNameValidation(name: "COLOR", value: "border"))
+      #expect(!SlotExtractor.passesNameValidation(name: "COLOR", value: "JPEGs"))
+
+      // BITRATE must be digits + optional unit.
+      #expect(SlotExtractor.passesNameValidation(name: "BITRATE", value: "5M"))
+      #expect(SlotExtractor.passesNameValidation(name: "BITRATE", value: "192k"))
+      #expect(SlotExtractor.passesNameValidation(name: "BITRATE", value: "1500"))
+      #expect(!SlotExtractor.passesNameValidation(name: "BITRATE", value: "h265"))
+      #expect(!SlotExtractor.passesNameValidation(name: "BITRATE", value: "fast"))
+
+      // DAYS must be sane (1..~30 years).
+      #expect(SlotExtractor.passesNameValidation(name: "DAYS", value: "365"))
+      #expect(SlotExtractor.passesNameValidation(name: "DAYS", value: "3650"))
+      #expect(!SlotExtractor.passesNameValidation(name: "DAYS", value: "0"))
+      #expect(!SlotExtractor.passesNameValidation(name: "DAYS", value: "99999"))
+
+      // BITS: known RSA key sizes only.
+      #expect(SlotExtractor.passesNameValidation(name: "BITS", value: "4096"))
+      #expect(SlotExtractor.passesNameValidation(name: "BITS", value: "2048"))
+      #expect(!SlotExtractor.passesNameValidation(name: "BITS", value: "365"))
+
+      // SIZE: NxM dimensions or percent; reject random words.
+      #expect(SlotExtractor.passesNameValidation(name: "SIZE", value: "200x200"))
+      #expect(SlotExtractor.passesNameValidation(name: "SIZE", value: "50%"))
+      #expect(SlotExtractor.passesNameValidation(name: "SIZE", value: "10x20+5+5"))
+      #expect(!SlotExtractor.passesNameValidation(name: "SIZE", value: "JPEGs"))
+      #expect(!SlotExtractor.passesNameValidation(name: "SIZE", value: "border"))
+
+      // SUBJ: openssl DN format.
+      #expect(SlotExtractor.passesNameValidation(name: "SUBJ", value: "/CN=foo"))
+      #expect(SlotExtractor.passesNameValidation(name: "SUBJ", value: "/CN=foo/O=bar"))
+      #expect(!SlotExtractor.passesNameValidation(name: "SUBJ", value: "valid"))
+    }
+
+    /// A3: format-name → glob synthesis.
+    @Test("Glob synthesis from natural-language quantifiers")
+    func globSynthesis() {
+      // Quantifier + format name → *.ext
+      #expect(FileExtensionAliases.synthesizeGlob(from: "all PNG files") == "*.png")
+      #expect(FileExtensionAliases.synthesizeGlob(from: "every JPEG in folder") == "*.jpg")
+      #expect(FileExtensionAliases.synthesizeGlob(from: "all of these PNG into a grid") == "*.png")
+      #expect(FileExtensionAliases.synthesizeGlob(from: "the mp4 files") == "*.mp4")
+      #expect(FileExtensionAliases.synthesizeGlob(from: "all webp images") == "*.webp")
+
+      // No quantifier + format that's also a common English word: no fire.
+      #expect(FileExtensionAliases.synthesizeGlob(from: "go to docs") == nil)
+
+      // No format name at all: nil.
+      #expect(FileExtensionAliases.synthesizeGlob(from: "list files in folder") == nil)
+    }
+
+    /// A4: numeric-unit normalization.
+    @Test("Numeric-unit normalization strips natural-language suffixes")
+    func numericUnitNormalization() {
+      #expect(SlotExtractor.normalizeNumericUnit("4px") == "4")
+      #expect(SlotExtractor.normalizeNumericUnit("30sec") == "30")
+      #expect(SlotExtractor.normalizeNumericUnit("90 degrees") == "90")
+      #expect(SlotExtractor.normalizeNumericUnit("2x") == "2")
+      #expect(SlotExtractor.normalizeNumericUnit("100%") == "100")
+      #expect(SlotExtractor.normalizeNumericUnit("180°") == "180")
+      #expect(SlotExtractor.normalizeNumericUnit("42") == "42")
+      #expect(SlotExtractor.normalizeNumericUnit("not-a-number") == "not-a-number")
+    }
+
+    @Test("File-size canonicalization")
+    func fileSizeCanonicalization() {
+      #expect(SlotExtractor.normalizeFileSize("10MB") == "10M")
+      #expect(SlotExtractor.normalizeFileSize("5 gigabytes") == "5G")
+      #expect(SlotExtractor.normalizeFileSize("100kb") == "100K")
+      #expect(SlotExtractor.normalizeFileSize("2tb") == "2T")
+      #expect(SlotExtractor.normalizeFileSize("100M") == "100M")
+    }
+  }
+
   // MARK: - Regression Guards
 
   @Suite("Regressions")

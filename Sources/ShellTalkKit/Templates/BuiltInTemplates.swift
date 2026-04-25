@@ -4738,6 +4738,29 @@ public enum BuiltInTemplates {
         ],
         discriminators: ["batch resize", "mogrify", "resize all"]
       ),
+      // A3: batch format conversion via mogrify. Handles natural-language
+      // "convert all PNG to JPG" / "convert every webp to png" queries —
+      // the per-image magick_convert can't do batch (it only runs on one
+      // INPUT/OUTPUT pair), so a dedicated template is needed.
+      CommandTemplate(
+        id: "magick_batch_convert",
+        intents: [
+          "convert all images in folder to format",
+          "batch convert all PNG to JPG",
+          "convert every PNG file to jpeg",
+          "imagemagick mogrify format batch",
+          "convert all webp to png",
+          "convert all jpg to png",
+        ],
+        command: "mogrify -format {TARGET} {PATTERN}",
+        slots: [
+          "TARGET": SlotDefinition(type: .fileExtension, defaultValue: "jpg",
+            extractPattern: #"(?:to|into|as)\s+([A-Za-z]{2,5})\b"#),
+          "PATTERN": SlotDefinition(type: .glob, defaultValue: "*.png",
+            extractPattern: #"(\*\.\w+)"#),
+        ],
+        discriminators: ["batch convert", "mogrify", "convert all", "convert every"]
+      ),
       CommandTemplate(
         id: "magick_invert",
         intents: [

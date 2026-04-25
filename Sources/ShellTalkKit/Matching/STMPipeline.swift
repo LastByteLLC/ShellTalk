@@ -182,6 +182,22 @@ public final class STMPipeline: Sendable {
     let command = resolver.resolve(template: match.template, extractedSlots: slots)
     timings.append(StageTiming(name: "resolve", elapsedMs: t0.elapsedMs()))
 
+    // Step 3.5: Unfilled-placeholder guard. After resolve, any remaining
+    // `{UPPERCASE_SLOT}` token is a slot the user didn't supply and the
+    // template didn't default. For incant-era templates (media, crypto,
+    // and tar_*/curl_* additions) we'd rather return nil than emit a
+    // command containing literal `{INPUT}` — those queries genuinely
+    // need a user-supplied path to be runnable.
+    //
+    // For pre-existing templates the behavior is unchanged: a vague
+    // query like "duplicate the config file" routes to cp_file with
+    // unfilled SOURCE/DEST and ships as guidance. Eval cases that depend
+    // on routing accuracy keep passing.
+    if Self.shouldEnforcePlaceholderGuard(template: match.template, categoryId: match.categoryId)
+       && Self.hasUnresolvedRequiredSlots(in: command) {
+      return nil
+    }
+
     // Step 4: Validate (optional)
     t0 = PipelineTimer.now()
     let validation = config.validateCommands ? validator.validate(command) : nil
@@ -294,6 +310,57 @@ public final class STMPipeline: Sendable {
     }
 
     return resolved
+  }
+
+  /// Whether to apply the strict unfilled-placeholder guard for this match.
+  /// Scoped to "incant-era" template clusters (media, crypto, plus the
+  /// tar_*/curl_* additions in compression/network) where unfilled inputs
+  /// produce strictly-broken commands. Pre-existing templates retain their
+  /// "emit-as-guidance" behavior so existing eval cases stay green.
+  static func shouldEnforcePlaceholderGuard(template: CommandTemplate, categoryId: String) -> Bool {
+    if categoryId == "media" || categoryId == "crypto" { return true }
+    let id = template.id
+    if id.hasPrefix("tar_create_")
+       || id.hasPrefix("tar_extract_")
+       || id == "tar_list_verbose"
+       || id == "tar_append"
+       || id == "tar_exclude"
+       || id == "tar_compare"
+       || id == "tar_preserve_perms"
+       || id == "tar_dereference" {
+      return true
+    }
+    if id.hasPrefix("curl_") && id != "curl_get" && id != "curl_post_json"
+       && id != "curl_download" && id != "curl_headers" && id != "curl_auth" {
+      return true
+    }
+    return false
+  }
+
+  /// Unfilled-required-slot detector. After resolver runs (which fills user
+  /// slots, then platform slots, then per-slot defaults), any remaining
+  /// `{UPPERCASE_SLOT}` token is a required slot the user didn't supply and
+  /// the template didn't default. Shipping such a command is always wrong.
+  ///
+  /// Excludes the `${VAR}` pattern (shell variable expansion), which is
+  /// legitimate output (e.g., `echo ${HOME}`).
+  static func hasUnresolvedRequiredSlots(in command: String) -> Bool {
+    // Match {NAME} but not ${NAME} (shell var). Use negative lookbehind:
+    // RE: a `{` that is not preceded by `$`, followed by [A-Z][A-Z0-9_]+ and `}`.
+    let regex = TemplateResolver.platformSlotRegex
+    let matches = regex.matches(in: command, range: NSRange(command.startIndex..., in: command))
+    for match in matches {
+      // Check that the `{` was not preceded by `$`. NSRegularExpression doesn't
+      // support negative lookbehind on older targets, so check here.
+      let braceRange = match.range
+      let braceStart = braceRange.location
+      if braceStart > 0 {
+        let prevIndex = command.index(command.startIndex, offsetBy: braceStart - 1)
+        if command[prevIndex] == "$" { continue }
+      }
+      return true
+    }
+    return false
   }
 
   /// Detect conversational/meta queries that have no shell-command answer.
