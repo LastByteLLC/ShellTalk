@@ -1,13 +1,27 @@
 // ShellTalk.swift — CLI entry point
 import ArgumentParser
+import Foundation
 import ShellTalkKit
+#if canImport(ShellTalkDiscovery)
+import ShellTalkDiscovery
+#endif
 
 @main
 struct ShellTalk: ParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "shelltalk",
     abstract: "Convert natural language to shell commands",
-    version: "0.1.0"
+    discussion: """
+      Discovery layer (V1.5) augments hand-written templates with examples
+      synthesized from the embedded tldr-pages corpus. Synthesized commands
+      are marked with a tilde ('~') prefix; auto-execute (-x) refuses them
+      unless --force is passed.
+
+      tldr-pages content is licensed under CC-BY-4.0 by the tldr-pages
+      maintainers and contributors. See:
+        https://github.com/tldr-pages/tldr/blob/main/LICENSE.md
+      """,
+    version: "1.5.0"
   )
 
   @Argument(help: "Natural language query (use quotes for multi-word).")
@@ -33,6 +47,15 @@ struct ShellTalk: ParsableCommand {
 
   @Option(name: .long, help: "Stderr from a failed command (used with --heal).")
   var stderr: String?
+
+  @Flag(name: .long, help: "Disable the discovery layer (no tldr fallback).")
+  var noDiscovery = false
+
+  @Flag(name: .long, help: "Force discovery path even when a built-in template would match (debug/exploration).")
+  var explore = false
+
+  @Flag(name: .long, help: "Force auto-execute of a synthesized command (with -x).")
+  var force = false
 
   func run() throws {
     // Profile mode
@@ -62,7 +85,53 @@ struct ShellTalk: ParsableCommand {
     }
 
     let config = debug ? PipelineConfig.debug : PipelineConfig.default
-    let pipeline = STMPipeline(config: config)
+
+    // V1.5: Construct the discovery provider when the layer is built in
+    // and not disabled by --no-discovery / SHELLTALK_DISCOVERY=off.
+    // On WASM canImport(ShellTalkDiscovery) is false; on macOS/Linux it
+    // wires the embedded tldr-pages corpus.
+    let discoveryProvider: DiscoveryProvider? = {
+      #if canImport(ShellTalkDiscovery)
+      if noDiscovery { return nil }
+      let envOff = ProcessInfo.processInfo.environment["SHELLTALK_DISCOVERY"] == "off"
+      if envOff { return nil }
+      return makeDefaultDiscoveryProvider()
+      #else
+      return nil
+      #endif
+    }()
+
+    let pipeline = STMPipeline(
+      config: config,
+      discoveryProvider: discoveryProvider
+    )
+
+    // V1.5: --explore forces the discovery path. Bypasses the standard
+    // matcher entirely so the user can see what tldr-pages would have
+    // produced, even when a built-in template would have matched. Useful
+    // for debugging the synthesizer and for "show me tldr's take."
+    if explore {
+      guard let provider = discoveryProvider else {
+        printError("--explore requires the discovery layer (not built in this build / disabled).")
+        throw ExitCode.failure
+      }
+      let synth = provider.synthesize(query: text, profile: SystemProfile.cached)
+      guard let s = synth else {
+        printError("Discovery returned no synthesis for: \(text)")
+        throw ExitCode.failure
+      }
+      print("~ \(s.template.command)")
+      printWarning("Synthesized from \(s.provenance) — verify before running. tldr-pages content © contributors, CC-BY-4.0.")
+      if debug {
+        print()
+        print("--- Discovery debug ---")
+        print("Source:     \(s.source.rawValue)")
+        print("Provenance: \(s.provenance)")
+        print("Conf cap:   \(s.confidenceCap)")
+        print("Provider:   \(provider.diagnosticName)")
+      }
+      return
+    }
 
     // Alternatives mode
     if alternatives {
@@ -117,9 +186,17 @@ struct ShellTalk: ParsableCommand {
       printDebug(result: result, debug: info, initMs: pipeline.initMs)
     }
 
-    // Display the command
-    let safety = safetyIcon(result.validation?.safetyLevel)
-    print("\(safety) \(result.command)")
+    // Display the command. Synthesized commands (V1.5) use a tilde
+    // prefix instead of the safety icon to make their lower-confidence
+    // status visually obvious.
+    if result.source == .builtIn || result.source == .userPattern {
+      let safety = safetyIcon(result.validation?.safetyLevel)
+      print("\(safety) \(result.command)")
+    } else {
+      print("~ \(result.command)")
+      let provLabel = result.provenance ?? "synthesized"
+      printWarning("Synthesized from \(provLabel) — verify before running. tldr-pages content © contributors, CC-BY-4.0.")
+    }
 
     // B6: Multi-operation hint. ShellTalk picked the dominant operation;
     // the trailing clause needs a separate command. Surface this so the
@@ -152,6 +229,14 @@ struct ShellTalk: ParsableCommand {
     if execute {
       guard result.validation?.safetyLevel != .dangerous else {
         printError("Refusing to execute dangerous command.")
+        throw ExitCode.failure
+      }
+      // V1.5: refuse auto-exec for synthesized commands unless --force.
+      // Synthesized commands have lower confidence and may contain
+      // unsubstituted {{placeholders}} from tldr examples; running
+      // them blindly is a foot-gun.
+      if result.source != .builtIn && result.source != .userPattern && !force {
+        printError("Refusing to auto-execute synthesized command. Pass --force to override, or copy the command and run it manually.")
         throw ExitCode.failure
       }
 

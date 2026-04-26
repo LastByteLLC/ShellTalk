@@ -49,6 +49,15 @@ public struct PipelineResult: Sendable {
   /// faithfully express. The hint describes the unhandled tail (e.g.,
   /// "with a 4px border") so the CLI/UX can surface it to the user.
   public let multiOperationHint: String?
+  /// V1.5: where this command came from. Built-in templates (the
+  /// pre-discovery default) are `.builtIn`; tldr-derived synthesis is
+  /// `.tldr`; user-saved patterns will be `.userPattern` (V1.5b);
+  /// `--help`-derived will be `.help` (V1.6+). The CLI uses this to
+  /// label confidence-bounded output ("~" prefix vs ">").
+  public let source: TemplateSource
+  /// V1.5: provenance string for synthesized commands (e.g.
+  /// "tldr/git-stash.md@209d423b"). nil for built-in templates.
+  public let provenance: String?
 
   public init(
     command: String,
@@ -59,7 +68,9 @@ public struct PipelineResult: Sendable {
     extractedSlots: [String: String],
     validation: CommandValidation?,
     debugInfo: DebugInfo?,
-    multiOperationHint: String? = nil
+    multiOperationHint: String? = nil,
+    source: TemplateSource = .builtIn,
+    provenance: String? = nil
   ) {
     self.command = command
     self.categoryId = categoryId
@@ -70,6 +81,8 @@ public struct PipelineResult: Sendable {
     self.validation = validation
     self.debugInfo = debugInfo
     self.multiOperationHint = multiOperationHint
+    self.source = source
+    self.provenance = provenance
   }
 
   /// Whether the command is valid and safe to display/execute.
@@ -108,6 +121,10 @@ public final class STMPipeline: Sendable {
   private let validator: CommandValidator
   private let profile: SystemProfile
   private let config: PipelineConfig
+  /// V1.5 discovery provider. Set by the executable target on macOS/Linux
+  /// when SHELLTALK_DISCOVERY != "off"; nil otherwise (WASM, opt-out).
+  /// When nil the pipeline behaves exactly as it did pre-V1.5.
+  private let discoveryProvider: DiscoveryProvider?
 
   /// Time spent constructing the pipeline (system discovery, index building, etc.)
   public let initMs: Double
@@ -115,7 +132,8 @@ public final class STMPipeline: Sendable {
   public init(
     profile: SystemProfile? = nil,
     store: TemplateStore? = nil,
-    config: PipelineConfig = .default
+    config: PipelineConfig = .default,
+    discoveryProvider: DiscoveryProvider? = nil
   ) {
     let initStart = PipelineTimer.now()
     let prof = profile ?? SystemProfile.cached
@@ -141,6 +159,11 @@ public final class STMPipeline: Sendable {
     self.profile = prof
     self.config = cfg
     self.matcher = IntentMatcher(store: st, config: cfg.matcherConfig, profile: prof)
+    // V1.5: Discovery provider is opt-in. Caller (the executable target)
+    // passes a provider on macOS/Linux when SHELLTALK_DISCOVERY != "off";
+    // here we just store whatever was passed.
+    let discoveryDisabled = ProcessInfo.processInfo.environment["SHELLTALK_DISCOVERY"] == "off"
+    self.discoveryProvider = discoveryDisabled ? nil : discoveryProvider
     self.extractor = SlotExtractor()
     self.recognizer = EntityRecognizer(profile: prof)
     self.resolver = TemplateResolver(profile: prof)
@@ -169,7 +192,16 @@ public final class STMPipeline: Sendable {
 
     // Step 1: Match intent (entity-aware)
     t0 = PipelineTimer.now()
-    guard let match = matcher.match(query, entities: entities) else { return nil }
+    guard let match = matcher.match(query, entities: entities) else {
+      // V1.5: when standard matching fails, fall back to runtime discovery
+      // (tldr-pages corpus, with `--help` parsing arriving in V1.6).
+      // Discovery is gated by `discoveryProvider` being non-nil, which
+      // happens only when the host platform supports it (macOS/Linux)
+      // and SHELLTALK_DISCOVERY != "off".
+      return discoveryFallback(
+        query: query, entities: entities, timings: &timings,
+        pipelineStart: pipelineStart)
+    }
     timings.append(StageTiming(name: "match", elapsedMs: t0.elapsedMs()))
 
     // Step 2: Extract slots (entity-aware) + post-process
@@ -289,6 +321,62 @@ public final class STMPipeline: Sendable {
       validation: validation,
       debugInfo: debug,
       multiOperationHint: multiOpHint
+    )
+  }
+
+  /// V1.5: Last-resort fallback when neither standard matching nor the
+  /// top-N alternatives yielded a viable result. Asks the discovery
+  /// provider (tldr-pages corpus in V1.5) to synthesize a template.
+  /// Synthesized commands flow through the same resolve + validate
+  /// path and carry a `source: .tldr` provenance tag for the CLI to
+  /// label confidence-bounded output.
+  private func discoveryFallback(
+    query: String,
+    entities: [RecognizedEntity],
+    timings: inout [StageTiming],
+    pipelineStart: PipelineTimer
+  ) -> PipelineResult? {
+    guard let provider = discoveryProvider else { return nil }
+    var t0 = PipelineTimer.now()
+    guard let synth = provider.synthesize(query: query, profile: profile) else {
+      timings.append(StageTiming(name: "discovery", elapsedMs: t0.elapsedMs()))
+      return nil
+    }
+    timings.append(StageTiming(name: "discovery", elapsedMs: t0.elapsedMs()))
+
+    // Resolve the synthesized template. Slot extraction runs against
+    // the synthesized template's slot definitions (currently empty —
+    // tldr commands embed `{{placeholder}}` literals the user fills in).
+    t0 = PipelineTimer.now()
+    let slots = extractor.extract(
+      from: query,
+      slots: synth.template.slots,
+      entities: entities,
+      profile: profile)
+    let command = resolver.resolve(template: synth.template, extractedSlots: slots)
+    timings.append(StageTiming(name: "resolve", elapsedMs: t0.elapsedMs()))
+
+    // Validate. Synthesized commands get the same syntax / safety /
+    // domain (B7) checks as built-ins. The validator is source-agnostic.
+    t0 = PipelineTimer.now()
+    let validation = config.validateCommands ? validator.validate(command) : nil
+    timings.append(StageTiming(name: "validate", elapsedMs: t0.elapsedMs()))
+
+    // Confidence: capped by the source's defaultConfidenceCap (0.7 for
+    // tldr). The CLI's auto-exec gate refuses anything below 0.85.
+    let conf = synth.confidenceCap
+    return PipelineResult(
+      command: command,
+      categoryId: "discovery",
+      templateId: synth.template.id,
+      categoryScore: conf,
+      templateScore: conf,
+      extractedSlots: slots,
+      validation: validation,
+      debugInfo: nil,
+      multiOperationHint: nil,
+      source: synth.source,
+      provenance: synth.provenance
     )
   }
 

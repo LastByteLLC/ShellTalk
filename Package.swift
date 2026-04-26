@@ -9,6 +9,7 @@ let package = Package(
     .executable(name: "stm-eval", targets: ["stm-eval"]),
     .executable(name: "shelltalk-wasm", targets: ["shelltalk-wasm"]),
     .library(name: "ShellTalkKit", targets: ["ShellTalkKit"]),
+    .library(name: "ShellTalkDiscovery", targets: ["ShellTalkDiscovery"]),
   ],
   dependencies: [
     .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.5.0"),
@@ -20,6 +21,12 @@ let package = Package(
       dependencies: [
         "ShellTalkKit",
         .product(name: "ArgumentParser", package: "swift-argument-parser"),
+        // Discovery layer is macOS/Linux only — the WASM executable
+        // doesn't link it, keeping its bundle size small. The embedded
+        // tldr corpus (CC-BY-4.0) ships as a SwiftPM resource of the
+        // ShellTalkDiscovery target.
+        .target(name: "ShellTalkDiscovery",
+                condition: .when(platforms: [.macOS, .linux])),
       ],
       path: "Sources/shelltalk"
     ),
@@ -30,6 +37,18 @@ let package = Package(
                  condition: .when(platforms: [.macOS, .linux])),
       ],
       path: "Sources/ShellTalkKit"
+    ),
+    .target(
+      name: "ShellTalkDiscovery",
+      dependencies: ["ShellTalkKit"],
+      path: "Sources/ShellTalkDiscovery",
+      // Embedded tldr-pages corpus (CC-BY-4.0). Gzipped at build time by
+      // harness/refresh-tldr-baseline.sh; runtime decompresses on first
+      // access. Trades ~5 ms cold-start CPU for ~3.7 MB binary savings.
+      resources: [
+        .process("Resources/tldr-baseline.json.gz"),
+        .process("Resources/tldr-baseline.meta.json"),
+      ]
     ),
     .executableTarget(
       name: "shelltalk-wasm",
@@ -45,6 +64,11 @@ let package = Package(
       name: "ShellTalkKitTests",
       dependencies: ["ShellTalkKit"],
       path: "Tests/ShellTalkKitTests"
+    ),
+    .testTarget(
+      name: "ShellTalkDiscoveryTests",
+      dependencies: ["ShellTalkDiscovery", "ShellTalkKit"],
+      path: "Tests/ShellTalkDiscoveryTests"
     ),
   ],
   swiftLanguageModes: [.v6]

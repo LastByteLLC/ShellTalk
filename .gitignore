@@ -13,3 +13,8 @@ DerivedData/
 # Local-only — only condensed findings at harness/*.md are tracked.
 harness/runs/
 *.lock
+
+# Discovery layer: uncompressed tldr corpus is regeneratable from the
+# committed .json.gz via gunzip and from upstream via refresh-tldr-baseline.sh.
+# Only the gzipped corpus + metadata sidecar are tracked.
+Sources/ShellTalkDiscovery/Resources/tldr-baseline.json
