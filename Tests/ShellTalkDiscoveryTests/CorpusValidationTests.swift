@@ -250,8 +250,10 @@ struct CorpusValidationTests {
           print("    '\(q)' → \(p)")
         }
       }
-      // Target ≥0.85; this measures end-to-end correctness on a real corpus.
-      #expect(acc >= 0.85, "tldr_roundtrip_acc=\(acc) below 0.85 floor")
+      // Floor 0.95: V1.5 ships at 0.9879. The 0.04 headroom absorbs
+      // small ranker tweaks (per-page IDF, stemming experiments, etc.)
+      // without breaking the gate; a real regression below 0.95 surfaces.
+      #expect(acc >= 0.95, "tldr_roundtrip_acc=\(acc) below 0.95 floor")
     }
 
     @Test("Within-page example ranking — tightly-described examples")
@@ -285,10 +287,13 @@ struct CorpusValidationTests {
       }
       let hitRate = attempts > 0 ? Double(hits) / Double(attempts) : 0
       print("Within-page ranking hit rate: \(String(format: "%.4f", hitRate)) (\(hits)/\(attempts))")
-      // Looser: same tool, ranking right ≥30% of the time. This is
-      // genuinely hard — descriptions are often near-synonyms.
-      #expect(hitRate >= 0.30,
-        "within-page ranking hitting only \(hitRate) — synthesizer may be returning examples[0] always")
+      // Floor 0.85: V1.5 ships at 0.9400 after adding per-page IDF
+      // weighting + command-token boost + last-wins position prior on
+      // top of plain Jaccard. The 0.09 headroom absorbs minor tweaks
+      // without breaking the gate. Below 0.85 indicates a regression
+      // (possibly returning examples[0] always or breaking IDF weighting).
+      #expect(hitRate >= 0.85,
+        "within-page ranking hitting only \(hitRate) — possible ranker regression")
     }
   }
 }
