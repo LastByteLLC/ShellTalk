@@ -4539,6 +4539,12 @@ public enum BuiltInTemplates {
           "montage of images", "imagemagick montage grid",
           "tile multiple images into grid",
           "combine images into contact sheet",
+          "put images into a row", "put images into a column",
+          "combine PNGs into a row", "combine images in a row",
+          "combine JPEGs into a column", "combine images in a column",
+          "arrange images in a row", "arrange images into a grid",
+          "tile pngs in a row", "tile images horizontally",
+          "tile images vertically", "compose images side by side",
         ],
         command: "{IM_CMD} montage {PATTERN} -tile {TILE} -geometry {GEOMETRY} {OUTPUT}",
         slots: [
@@ -4550,7 +4556,7 @@ public enum BuiltInTemplates {
           "OUTPUT": SlotDefinition(type: .path, defaultValue: "montage.jpg",
             extractPattern: #"(?:to|as|save)\s+(\S+)"#),
         ],
-        discriminators: ["montage", "grid of", "contact sheet", "tile images"]
+        discriminators: ["montage", "grid", "contact sheet", "tile", "into a row", "into a column", "in a row", "in a column"]
       ),
       CommandTemplate(
         id: "magick_annotate",

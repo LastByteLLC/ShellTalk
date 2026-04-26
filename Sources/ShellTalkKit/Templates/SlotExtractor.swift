@@ -78,6 +78,16 @@ public struct SlotExtractor: Sendable {
         continue
       }
 
+      // Strategy 3.6 (B5): Semantic-shape synthesis. Slot names like
+      // TILE / GEOMETRY have natural-language forms — "row" implies
+      // tile=Nx1, "column" implies 1xN, "grid" implies NxN. When the
+      // query uses a shape word and the regex didn't pick it up, fall
+      // through to this synthesis instead of the literal default.
+      if let shape = Self.synthesizeShape(slotName: name, from: query) {
+        extracted[name] = shape
+        continue
+      }
+
       // Fallback: default value
       if let defaultValue = definition.defaultValue {
         extracted[name] = defaultValue
@@ -99,14 +109,15 @@ public struct SlotExtractor: Sendable {
     // A2: Slot-name-aware validation. Some slots are too domain-specific
     // for SlotType to capture — COLOR must be a color, BITRATE must be
     // a digit+unit, DAYS must be in a sane range, etc. When a value
-    // fails its name-specific validator we fall back to the slot's
-    // defaultValue (or drop it). This prevents emissions like
-    // `-bordercolor border` (the word "border" bound to COLOR) and
-    // `-days 4096` (the RSA bit count bound to DAYS).
+    // fails its name-specific validator we try semantic-shape synthesis
+    // first (B5: "row" → tile=0x1), then fall back to defaultValue,
+    // then drop the slot.
     for (name, value) in extracted {
       guard let definition = slots[name] else { continue }
       if !Self.passesNameValidation(name: name, value: value) {
-        if let defaultValue = definition.defaultValue {
+        if let shape = Self.synthesizeShape(slotName: name, from: query) {
+          extracted[name] = shape
+        } else if let defaultValue = definition.defaultValue {
           extracted[name] = defaultValue
         } else {
           extracted.removeValue(forKey: name)
@@ -166,7 +177,7 @@ public struct SlotExtractor: Sendable {
       // AND filesystem size (100M, 1G, 512K) AND raw counts (1024).
       // Accept any of these; reject only random words like "JPEGs" or "border".
       if v.range(
-        of: #"^\d+(x\d+){0,2}([+-]\d+){0,2}%?$|^\d+%$"#,
+        of: #"^\d+(x\d*){0,2}([+-]\d+){0,2}%?$|^\d+%$"#,
         options: .regularExpression) != nil { return true }
       // Filesystem size form
       if v.range(
@@ -174,9 +185,11 @@ public struct SlotExtractor: Sendable {
         options: .regularExpression) != nil { return true }
       return false
     case "GEOMETRY", "TILE", "DIMENSIONS":
-      // ImageMagick geometry: NxM, NxMxK, N%, AxB+C+D
+      // ImageMagick geometry/tile: NxM, NxMxK, N%, AxB+C+D, also "4x" (open).
+      // ImageMagick accepts `-tile 4x` (4 columns, rows auto), so the
+      // closing dimension count is optional.
       return v.range(
-        of: #"^\d+(x\d+){0,2}([+-]\d+){0,2}%?$|^\d+%$"#,
+        of: #"^\d+(x\d*){0,2}([+-]\d+){0,2}%?$|^\d+%$|^x\d+$"#,
         options: .regularExpression) != nil
     case "TIME", "START", "END":
       // HH:MM:SS, MM:SS, SS, or N+suffix (30s, 1m30, 1:30)
@@ -197,6 +210,68 @@ public struct SlotExtractor: Sendable {
     default:
       return true  // Unknown slot names pass through
     }
+  }
+
+  /// B5: Semantic-shape synthesis. Maps natural-language shape words
+  /// to ImageMagick tile / geometry forms. "Put images in a row" →
+  /// tile=Nx1; "into a grid" → tile=NxN. When the query specifies an
+  /// integer dimension, that's used; otherwise sensible defaults fire.
+  static func synthesizeShape(slotName: String, from query: String) -> String? {
+    let lower = query.lowercased()
+    let isTile = slotName == "TILE"
+    let isGeo = slotName == "GEOMETRY"
+    if !isTile && !isGeo { return nil }
+
+    // Look for an explicit count near the shape word.
+    func extractCount(near word: String) -> Int? {
+      let pattern = #"(?:(\d+)\s+(?:wide|across|per\s+row|columns?|cols?|images?|files?)|(?:in\s+a\s+|into\s+a\s+)?\d+\s*x\s*\d*\s+\#(word)|(?:into\s+a\s+|in\s+a\s+|of\s+)(\d+)[ -]?\#(word))"#
+      _ = pattern  // For documentation; below uses a simpler approach.
+      let countPattern = #"(\d+)\s*(?:wide|per\s+row|across|columns?|cols?)"#
+      if let regex = try? NSRegularExpression(pattern: countPattern),
+         let m = regex.firstMatch(in: lower, range: NSRange(lower.startIndex..., in: lower)),
+         m.numberOfRanges >= 2,
+         let r = Range(m.range(at: 1), in: lower),
+         let n = Int(lower[r]) {
+        return n
+      }
+      return nil
+    }
+
+    // ROW shape: NxM where M=1.
+    if lower.contains(" row ") || lower.contains("a row ") || lower.contains("into a row")
+       || lower.contains("in a row") || lower.contains(" row\u{0}") || lower.hasSuffix("row") {
+      let n = extractCount(near: "row") ?? 0
+      // tile=Nx1: Nx0 means "as many as needed in 1 row" in ImageMagick.
+      // For GEOMETRY return a per-cell size default.
+      if isTile { return n > 0 ? "\(n)x1" : "0x1" }
+      if isGeo { return "200x200+5+5" }
+    }
+
+    // COLUMN shape: 1xN.
+    if lower.contains("column") || lower.contains(" col ") || lower.contains("a column")
+       || lower.contains("into a column") || lower.contains("in a column") {
+      let n = extractCount(near: "column") ?? 0
+      if isTile { return n > 0 ? "1x\(n)" : "1x0" }
+      if isGeo { return "200x200+5+5" }
+    }
+
+    // GRID / contact-sheet shape: NxM. Look for explicit AxB form first.
+    if lower.contains("grid") || lower.contains("contact sheet") || lower.contains("tile") {
+      // If the query mentions "NxM grid", capture it.
+      let gridPattern = #"(\d+)\s*x\s*(\d+)\s*(?:grid|tile)?"#
+      if let regex = try? NSRegularExpression(pattern: gridPattern),
+         let m = regex.firstMatch(in: lower, range: NSRange(lower.startIndex..., in: lower)),
+         m.numberOfRanges >= 3,
+         let rA = Range(m.range(at: 1), in: lower),
+         let rB = Range(m.range(at: 2), in: lower) {
+        if isTile { return "\(lower[rA])x\(lower[rB])" }
+      }
+      // Default grid: 4x without specified rows (auto)
+      if isTile { return "4x" }
+      if isGeo { return "200x200+5+5" }
+    }
+
+    return nil
   }
 
   /// Common color names accepted by ImageMagick / CSS / X11.

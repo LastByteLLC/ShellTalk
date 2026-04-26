@@ -44,6 +44,33 @@ public struct PipelineResult: Sendable {
   public let extractedSlots: [String: String]
   public let validation: CommandValidation?
   public let debugInfo: DebugInfo?
+  /// B6: Multi-operation hint. When non-nil the query was detected as a
+  /// compound that ShellTalk's single-template architecture cannot
+  /// faithfully express. The hint describes the unhandled tail (e.g.,
+  /// "with a 4px border") so the CLI/UX can surface it to the user.
+  public let multiOperationHint: String?
+
+  public init(
+    command: String,
+    categoryId: String,
+    templateId: String,
+    categoryScore: Double,
+    templateScore: Double,
+    extractedSlots: [String: String],
+    validation: CommandValidation?,
+    debugInfo: DebugInfo?,
+    multiOperationHint: String? = nil
+  ) {
+    self.command = command
+    self.categoryId = categoryId
+    self.templateId = templateId
+    self.categoryScore = categoryScore
+    self.templateScore = templateScore
+    self.extractedSlots = extractedSlots
+    self.validation = validation
+    self.debugInfo = debugInfo
+    self.multiOperationHint = multiOperationHint
+  }
 
   /// Whether the command is valid and safe to display/execute.
   public var isValid: Bool {
@@ -189,18 +216,41 @@ public final class STMPipeline: Sendable {
     // command containing literal `{INPUT}` — those queries genuinely
     // need a user-supplied path to be runnable.
     //
+    // Fallback: when the top match fails the guard, try the next-best
+    // candidates in order. This handles cases where the BM25 winner has
+    // unfilled slots but the runner-up resolves cleanly.
+    //
     // For pre-existing templates the behavior is unchanged: a vague
     // query like "duplicate the config file" routes to cp_file with
-    // unfilled SOURCE/DEST and ships as guidance. Eval cases that depend
-    // on routing accuracy keep passing.
-    if Self.shouldEnforcePlaceholderGuard(template: match.template, categoryId: match.categoryId)
-       && Self.hasUnresolvedRequiredSlots(in: command) {
-      return nil
+    // unfilled SOURCE/DEST and ships as guidance.
+    var workingMatch = match
+    var workingCommand = command
+    var workingSlots = slots
+    if Self.shouldEnforcePlaceholderGuard(template: workingMatch.template, categoryId: workingMatch.categoryId)
+       && Self.hasUnresolvedRequiredSlots(in: workingCommand) {
+      // Walk top-N alternatives looking for one that resolves cleanly.
+      let alternatives = matcher.matchTopN(query, n: 5).dropFirst()
+      var found: (IntentMatchResult, [String: String], String)?
+      for alt in alternatives {
+        let altSlots = extractor.extract(
+          from: query, slots: alt.template.slots,
+          entities: entities, profile: profile)
+        let altCmd = resolver.resolve(template: alt.template, extractedSlots: altSlots)
+        if Self.shouldEnforcePlaceholderGuard(template: alt.template, categoryId: alt.categoryId) {
+          if Self.hasUnresolvedRequiredSlots(in: altCmd) { continue }
+        }
+        found = (alt, altSlots, altCmd)
+        break
+      }
+      guard let f = found else { return nil }
+      workingMatch = f.0
+      workingSlots = f.1
+      workingCommand = f.2
     }
 
     // Step 4: Validate (optional)
     t0 = PipelineTimer.now()
-    let validation = config.validateCommands ? validator.validate(command) : nil
+    let validation = config.validateCommands ? validator.validate(workingCommand) : nil
     timings.append(StageTiming(name: "validate", elapsedMs: t0.elapsedMs()))
 
     // Step 5: Debug info (optional)
@@ -223,15 +273,22 @@ public final class STMPipeline: Sendable {
       debug = nil
     }
 
+    // B6: Detect compound queries that the single-template result can't
+    // fully express. We don't change the resolved command (the user gets
+    // the dominant operation) but emit a `multiOperationHint` describing
+    // the tail clause so the CLI can flag it.
+    let multiOpHint = Self.detectMultiOperationTail(query: query, primaryTemplateId: workingMatch.templateId)
+
     return PipelineResult(
-      command: command,
-      categoryId: match.categoryId,
-      templateId: match.templateId,
-      categoryScore: match.categoryScore,
-      templateScore: match.templateScore,
-      extractedSlots: slots,
+      command: workingCommand,
+      categoryId: workingMatch.categoryId,
+      templateId: workingMatch.templateId,
+      categoryScore: workingMatch.categoryScore,
+      templateScore: workingMatch.templateScore,
+      extractedSlots: workingSlots,
       validation: validation,
-      debugInfo: debug
+      debugInfo: debug,
+      multiOperationHint: multiOpHint
     )
   }
 
@@ -361,6 +418,61 @@ public final class STMPipeline: Sendable {
       return true
     }
     return false
+  }
+
+  /// B6: Detect compound-operation tails that the single-template result
+  /// can't fully express. Looks for connector phrases (`with a`, `and`,
+  /// `then`, `plus`) introducing a clause that names another operation
+  /// the dominant template doesn't cover.
+  ///
+  /// Returns a short hint string like "with a 4px border" when the tail
+  /// is detected, or nil for single-op queries.
+  ///
+  /// Conservative by design: well-known multi-input templates
+  /// (concat A and B, mix audio A and B) are exempt because their
+  /// command syntax natively takes both clauses.
+  static func detectMultiOperationTail(query: String, primaryTemplateId: String) -> String? {
+    let lower = query.lowercased()
+    let secondOpKeywords = [
+      "border", "watermark", "subtitle", "fade", "blur", "sharpen",
+      "crop", "rotate", "resize", "scale", "compress", "encode",
+      "thumbnail", "encrypt", "sign", "verify another",
+    ]
+
+    // Templates whose syntax natively consumes "X and Y" — for these,
+    // a single " and " connector is *not* a compound signal. Only flag
+    // when there are 2+ ANDs OR a non-`and` connector is present.
+    let nativeAndConsuming: Set<String> = [
+      "ffmpeg_concat", "ffmpeg_concat_filter", "ffmpeg_concat_demuxer",
+      "ffmpeg_audio_mix", "ffmpeg_replace_audio",
+      "magick_compose", "magick_montage",
+      "diff_files", "git_commit_push",
+    ]
+
+    // Non-`and` connectors always indicate a second operation when the
+    // tail names an action keyword — even for native-and-consuming templates.
+    // ("concat A and B with a fade-in" → still a multi-op).
+    let strongConnectors = [" then ", " plus ", " also ", " with a ", " and also "]
+    for connector in strongConnectors {
+      if let range = lower.range(of: connector) {
+        let tail = String(lower[range.lowerBound...]).trimmingCharacters(in: .whitespaces)
+        if secondOpKeywords.contains(where: { tail.contains($0) }) {
+          return tail
+        }
+      }
+    }
+
+    // " and " is a weaker signal — may be a native-syntax conjunction.
+    // Only flag for non-native templates AND require an action keyword
+    // in the tail.
+    if !nativeAndConsuming.contains(primaryTemplateId),
+       let range = lower.range(of: " and ") {
+      let tail = String(lower[range.lowerBound...]).trimmingCharacters(in: .whitespaces)
+      if secondOpKeywords.contains(where: { tail.contains($0) }) {
+        return tail
+      }
+    }
+    return nil
   }
 
   /// Detect conversational/meta queries that have no shell-command answer.

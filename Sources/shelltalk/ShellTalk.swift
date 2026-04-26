@@ -121,6 +121,14 @@ struct ShellTalk: ParsableCommand {
     let safety = safetyIcon(result.validation?.safetyLevel)
     print("\(safety) \(result.command)")
 
+    // B6: Multi-operation hint. ShellTalk picked the dominant operation;
+    // the trailing clause needs a separate command. Surface this so the
+    // user knows the output is incomplete rather than discovering it at
+    // run time.
+    if let hint = result.multiOperationHint {
+      printWarning("Query has a second operation '\(hint)' — run that as a separate command.")
+    }
+
     // Validation warnings
     if let validation = result.validation {
       for warning in validation.warnings {

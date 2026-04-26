@@ -46,6 +46,15 @@ public struct CommandValidator: Sendable {
     if !paths { warnings.append("Referenced path may not exist") }
     if safety == .dangerous { warnings.append("Command classified as dangerous") }
 
+    // B7: domain-specific structural validators. These don't run the
+    // tool — that would require a sandbox — but check for known-bad
+    // shapes in the resolved command. Each validator returns a warning
+    // string when it fires.
+    if let w = Self.checkInputOutputOverwrite(command) { warnings.append(w) }
+    if let w = Self.checkFFmpegEncoder(command) { warnings.append(w) }
+    if let w = Self.checkOpenSSLLegacy(command, profile: profile) { warnings.append(w) }
+    if let w = Self.checkMagickFormat(command) { warnings.append(w) }
+
     return CommandValidation(
       syntaxValid: syntax,
       commandExists: cmdExists,
@@ -53,6 +62,78 @@ public struct CommandValidator: Sendable {
       safetyLevel: safety,
       warnings: warnings
     )
+  }
+
+  // MARK: - B7 Domain Validators
+
+  /// Detect commands where INPUT and OUTPUT paths are identical — the
+  /// command silently overwrites its own input. ffmpeg/magick will
+  /// produce empty/corrupt output rather than fail loudly.
+  static func checkInputOutputOverwrite(_ command: String) -> String? {
+    // Only fire for known transcoding/transform tools.
+    let transformers = ["ffmpeg", "magick", "convert", "mogrify", "sips"]
+    guard transformers.contains(where: { command.contains($0) }) else { return nil }
+    // Find tokens that look like file paths with extensions.
+    let pattern = #"\b\S+\.(?:mp4|mov|mkv|webm|avi|flv|m4v|jpg|jpeg|png|gif|webp|tiff|bmp|heic|svg|m4a|mp3|wav|flac|aac|opus|ogg|pem|crt|cer|key|p12|der|pdf)\b"#
+    guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive])
+    else { return nil }
+    let matches = regex.matches(in: command, range: NSRange(command.startIndex..., in: command))
+    var paths: [String] = []
+    for m in matches {
+      if let r = Range(m.range, in: command) {
+        paths.append(String(command[r]))
+      }
+    }
+    if paths.count < 2 { return nil }
+    // If the same path appears twice we're overwriting.
+    let counts = Dictionary(grouping: paths, by: { $0 }).mapValues { $0.count }
+    if let dup = counts.first(where: { $0.value >= 2 })?.key {
+      return "Output overwrites input (\(dup)) — the original file will be lost."
+    }
+    return nil
+  }
+
+  /// Warn when an ffmpeg encoder name is used that this build of ffmpeg
+  /// often lacks. We don't probe the binary (too slow); we warn on the
+  /// well-known optional-dependency encoders.
+  static func checkFFmpegEncoder(_ command: String) -> String? {
+    guard command.contains("ffmpeg") else { return nil }
+    let optionalEncoders: [String: String] = [
+      "libsvtav1": "Requires ffmpeg built with --enable-libsvtav1.",
+      "libaom-av1": "Requires ffmpeg built with --enable-libaom.",
+      "libx265": "Requires ffmpeg built with --enable-libx265.",
+      "libvpx-vp9": "Requires ffmpeg built with --enable-libvpx.",
+      "hevc_videotoolbox": "macOS-only encoder; not available on Linux.",
+      "h264_videotoolbox": "macOS-only encoder; not available on Linux.",
+    ]
+    for (encoder, note) in optionalEncoders where command.contains(encoder) {
+      return "ffmpeg encoder '\(encoder)': \(note)"
+    }
+    return nil
+  }
+
+  /// Warn when a command uses OpenSSL 3 legacy-provider ciphers but the
+  /// active openssl is LibreSSL (which doesn't have providers).
+  static func checkOpenSSLLegacy(_ command: String, profile: SystemProfile) -> String? {
+    guard command.contains("openssl") else { return nil }
+    let legacyCiphers = ["des-ede3-cbc", "bf-cbc", "rc4", "rc2-cbc", "des"]
+    let hit = legacyCiphers.first(where: { command.contains($0) })
+    guard let cipher = hit else { return nil }
+    if profile.commandFlavors["openssl"] == "libressl" {
+      return "Cipher '\(cipher)' may not be available on LibreSSL. Use Homebrew openssl@3 (set as {OPENSSL_CMD})."
+    }
+    return nil
+  }
+
+  /// Warn when ImageMagick is asked to read/write formats with optional
+  /// delegate dependencies (HEIC, AVIF, JXL).
+  static func checkMagickFormat(_ command: String) -> String? {
+    guard command.contains("magick") || command.contains("mogrify") else { return nil }
+    let optionalFormats = ["heic", "heif", "avif", "jxl"]
+    for ext in optionalFormats where command.lowercased().contains(".\(ext)") {
+      return "ImageMagick may need an optional delegate for .\(ext). Verify with: magick -list format | grep -i \(ext)"
+    }
+    return nil
   }
 
   // MARK: - Syntax Check

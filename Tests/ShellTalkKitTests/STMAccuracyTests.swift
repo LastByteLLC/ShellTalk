@@ -462,6 +462,86 @@ struct STMAccuracyTests {
       #expect(SlotExtractor.normalizeFileSize("2tb") == "2T")
       #expect(SlotExtractor.normalizeFileSize("100M") == "100M")
     }
+
+    /// B5: semantic-shape mapping for montage tile values.
+    @Test("Semantic-shape synthesis — row, column, grid")
+    func shapeSynthesis() {
+      // Row → Nx1 (or 0x1 when count not specified)
+      #expect(SlotExtractor.synthesizeShape(slotName: "TILE", from: "into a row") == "0x1")
+      #expect(SlotExtractor.synthesizeShape(slotName: "TILE", from: "all PNGs in a row") == "0x1")
+      // Column → 1xN
+      #expect(SlotExtractor.synthesizeShape(slotName: "TILE", from: "into a column") == "1x0")
+      // Grid AxB
+      #expect(SlotExtractor.synthesizeShape(slotName: "TILE", from: "into a 9x9 grid") == "9x9")
+      #expect(SlotExtractor.synthesizeShape(slotName: "TILE", from: "in a 4x4 grid") == "4x4")
+      // No shape → nil
+      #expect(SlotExtractor.synthesizeShape(slotName: "TILE", from: "rotate the image") == nil)
+      // Slot name not handled → nil
+      #expect(SlotExtractor.synthesizeShape(slotName: "INPUT", from: "into a row") == nil)
+    }
+
+    /// B6: compound-query detection.
+    @Test("Multi-operation tail detection")
+    func multiOperationDetection() {
+      // "with a X border" — strong signal
+      let r1 = STMPipeline.detectMultiOperationTail(
+        query: "put PNGs into a row with a 4px border",
+        primaryTemplateId: "magick_montage")
+      #expect(r1?.contains("border") == true)
+
+      // "then add watermark" — strong signal
+      let r2 = STMPipeline.detectMultiOperationTail(
+        query: "encode video.mov to h264 then add watermark",
+        primaryTemplateId: "ffmpeg_h264")
+      #expect(r2?.contains("watermark") == true)
+
+      // "concat A and B" — native syntax, no flag
+      let r3 = STMPipeline.detectMultiOperationTail(
+        query: "concat clip1.mp4 and clip2.mp4 into output.mp4",
+        primaryTemplateId: "ffmpeg_concat")
+      #expect(r3 == nil)
+
+      // Single-op query — no flag
+      let r4 = STMPipeline.detectMultiOperationTail(
+        query: "rotate IMG.jpg 90 degrees",
+        primaryTemplateId: "magick_rotate")
+      #expect(r4 == nil)
+
+      // "and resize" — second op for non-native template
+      let r5 = STMPipeline.detectMultiOperationTail(
+        query: "convert video.mov to mp4 and resize to 1280x720",
+        primaryTemplateId: "ffmpeg_convert")
+      #expect(r5?.contains("resize") == true)
+    }
+
+    /// B7: domain validators flag overwrite, missing encoders, format risk.
+    @Test("Domain validators — overwrite, encoder, legacy cipher, format")
+    func domainValidators() {
+      // Input/output overwrite
+      let v1 = CommandValidator.checkInputOutputOverwrite(
+        "magick IMG_1234.jpg -rotate 90 IMG_1234.jpg")
+      #expect(v1?.contains("Output overwrites input") == true)
+
+      // Distinct paths — no warning
+      let v2 = CommandValidator.checkInputOutputOverwrite(
+        "magick photo.jpg -rotate 90 rotated.jpg")
+      #expect(v2 == nil)
+
+      // Optional ffmpeg encoder
+      let v3 = CommandValidator.checkFFmpegEncoder(
+        "ffmpeg -i in.mov -c:v libsvtav1 out.mp4")
+      #expect(v3?.contains("libsvtav1") == true)
+
+      // Standard encoder — no warning
+      let v4 = CommandValidator.checkFFmpegEncoder(
+        "ffmpeg -i in.mov -c:v libx264 out.mp4")
+      #expect(v4 == nil)
+
+      // HEIC delegate warning
+      let v5 = CommandValidator.checkMagickFormat(
+        "magick photo.jpg photo.heic")
+      #expect(v5?.contains("heic") == true)
+    }
   }
 
   // MARK: - Regression Guards
