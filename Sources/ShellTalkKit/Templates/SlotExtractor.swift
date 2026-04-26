@@ -29,24 +29,43 @@ public struct SlotExtractor: Sendable {
     var extracted: [String: String] = [:]
     var usedEntities = Set<String>()  // Track which entities we've consumed
 
-    for (name, definition) in slots {
+    // C8: deterministic slot iteration + consumed-range tracking.
+    // Swift dictionary order is non-deterministic, which makes slot
+    // collisions (two slots whose extractPattern matches the same span)
+    // resolve differently across runs. Sort by (specificity, name) so
+    // narrower patterns win first, and track which character ranges of
+    // the query each slot's regex consumed.
+    let sortedSlotNames = slots.keys.sorted(by: Self.slotPrioritySort(slots: slots))
+    var consumedRanges: [Range<String.Index>] = []
+
+    for name in sortedSlotNames {
+      guard let definition = slots[name] else { continue }
       // Strategy 1: Regex extraction pattern (most precise, template-author-designed)
       // T2.1: when multi=true, collect all matches and join with space.
       if let pattern = definition.extractPattern {
         let value: String?
+        let matchRange: Range<String.Index>?
         if definition.multi {
           value = extractAllMatches(pattern: pattern, from: query)
+          matchRange = nil  // multi consumes many spans; conservative: don't reserve
         } else {
-          value = extractByRegex(pattern: pattern, from: query)
+          let result = Self.extractByRegexWithRange(
+            pattern: pattern, from: query, excluding: consumedRanges)
+          value = result.value
+          matchRange = result.range
         }
         if let v = value, !isNoiseValue(v, type: definition.type) {
-          // Sanitize each token independently for multi (preserves quote-strip per item).
           if definition.multi {
             let parts = v.split(separator: " ").map { sanitize(String($0), type: definition.type) }
             extracted[name] = parts.joined(separator: " ")
           } else {
             extracted[name] = sanitize(v, type: definition.type)
           }
+          if let r = matchRange { consumedRanges.append(r) }
+          // C8: also tell entity matching this value was consumed so a
+          // later slot's entity-fallback doesn't grab the same string.
+          usedEntities.insert(v)
+          if let cleaned = extracted[name] { usedEntities.insert(cleaned) }
           continue
         }
       }
@@ -478,6 +497,71 @@ public struct SlotExtractor: Sendable {
       }
     }
     return nil
+  }
+
+  /// C8: regex extraction that skips matches whose capture group lies
+  /// entirely within a previously-consumed range. Returns the captured
+  /// value AND the FULL match range so callers can mark it consumed.
+  static func extractByRegexWithRange(
+    pattern: String,
+    from text: String,
+    excluding consumed: [Range<String.Index>]
+  ) -> (value: String?, range: Range<String.Index>?) {
+    guard let regex = Self.compiledPattern(pattern) else { return (nil, nil) }
+    let nsrange = NSRange(text.startIndex..., in: text)
+    let matches = regex.matches(in: text, range: nsrange)
+    for match in matches {
+      // Walk capture groups for this match. If the first non-empty capture
+      // is INSIDE a consumed range, skip the whole match and try next.
+      for i in 1..<match.numberOfRanges {
+        guard let captureRange = Range(match.range(at: i), in: text) else { continue }
+        let value = String(text[captureRange])
+        if value.isEmpty { continue }
+        // If the captured span overlaps any consumed range, skip.
+        if consumed.contains(where: { $0.overlaps(captureRange) }) {
+          break  // try next match
+        }
+        // Use the full match range for consumption (so connector tokens
+        // like "to ", "from " also get consumed).
+        let fullRange = Range(match.range, in: text)
+        return (value, fullRange)
+      }
+    }
+    return (nil, nil)
+  }
+
+  /// C8: priority sort for slots. Slots with anchored extractPatterns
+  /// (longer literal prefixes, more groups) are tried first because they
+  /// have lower false-positive risk. Falls back to alphabetical name.
+  static func slotPrioritySort(
+    slots: [String: SlotDefinition]
+  ) -> (String, String) -> Bool {
+    return { a, b in
+      let pa = slots[a]?.extractPattern ?? ""
+      let pb = slots[b]?.extractPattern ?? ""
+      // Prefer anchored alternation patterns (more literal context) by
+      // counting non-meta characters as a rough specificity proxy.
+      let sa = patternSpecificity(pa)
+      let sb = patternSpecificity(pb)
+      if sa != sb { return sa > sb }
+      return a < b  // lexical tie-break for determinism
+    }
+  }
+
+  private static func patternSpecificity(_ pattern: String) -> Int {
+    if pattern.isEmpty { return 0 }
+    // Count "literal anchor" characters: alphanumerics + dot inside
+    // non-bracket context. Crude but effective for the templates we ship.
+    var score = 0
+    var inClass = false
+    for c in pattern {
+      if c == "[" { inClass = true; continue }
+      if c == "]" { inClass = false; continue }
+      if inClass { continue }
+      if c.isLetter || c == "." { score += 1 }
+      if c == "|" { score -= 1 }  // alternations broaden the pattern
+    }
+    return score
   }
 
   /// T2.1: Collect ALL matches' first non-nil capture group, joined with

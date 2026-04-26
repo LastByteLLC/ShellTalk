@@ -514,6 +514,26 @@ struct STMAccuracyTests {
       #expect(r5?.contains("resize") == true)
     }
 
+    /// C8: phrase-aware extraction fixes regex collisions.
+    /// Two slots with overlapping extractPattern shouldn't both grab
+    /// the same span of the query.
+    @Test("Slot regex collision — verify cert against ca")
+    func slotRegexCollision() {
+      // openssl_verify_chain has CA `(?:against|ca|CAfile)\s+...` and CERT
+      // `(?:cert)\s+...`. Pre-C8, both slots could end up with "ca.pem".
+      let r = pipeline.process("verify cert.pem against ca.pem")
+      #expect(r != nil)
+      if let r {
+        // CA must be ca.pem AND CERT must be cert.pem (not the same).
+        #expect(r.command.contains("-CAfile ca.pem"))
+        #expect(r.command.contains("cert.pem"))
+        // The ca.pem and cert.pem paths must be distinct in output.
+        let ca = r.command.range(of: "ca.pem")
+        let cert = r.command.range(of: "cert.pem")
+        #expect(ca != nil && cert != nil)
+      }
+    }
+
     /// B7: domain validators flag overwrite, missing encoders, format risk.
     @Test("Domain validators — overwrite, encoder, legacy cipher, format")
     func domainValidators() {
