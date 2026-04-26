@@ -40,8 +40,12 @@ let package = Package(
     ),
     .target(
       name: "ShellTalkDiscovery",
-      dependencies: ["ShellTalkKit"],
+      dependencies: ["ShellTalkKit", "CZlib"],
       path: "Sources/ShellTalkDiscovery",
+      // Build-time leftover from harness/refresh-tldr-baseline.sh; the
+      // .json.gz next to it is the actual shipped artifact. Gitignored,
+      // but SwiftPM still warns on unhandled files.
+      exclude: ["Resources/tldr-baseline.json"],
       // Embedded tldr-pages corpus (CC-BY-4.0). Gzipped at build time by
       // harness/refresh-tldr-baseline.sh; runtime decompresses on first
       // access. Trades ~5 ms cold-start CPU for ~3.7 MB binary savings.
@@ -49,6 +53,15 @@ let package = Package(
         .process("Resources/tldr-baseline.json.gz"),
         .process("Resources/tldr-baseline.meta.json"),
       ]
+    ),
+    // System wrapper for libz. macOS ships zlib in the SDK; Linux ships
+    // it as zlib1g (already on the swiftlang/swift Docker images). Used
+    // exclusively by ShellTalkDiscovery to decompress the embedded
+    // tldr-pages corpus — this is why we don't pull in Apple's
+    // Compression.framework (Darwin-only).
+    .systemLibrary(
+      name: "CZlib",
+      path: "Sources/CZlib"
     ),
     .executableTarget(
       name: "shelltalk-wasm",

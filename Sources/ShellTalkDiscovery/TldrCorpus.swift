@@ -5,6 +5,7 @@
 //   https://github.com/tldr-pages/tldr/blob/main/LICENSE.md
 
 import Foundation
+import CZlib
 
 /// One example from a tldr page — a (description, command) pair where
 /// `command` may contain `{{placeholder}}` tokens that the synthesizer
@@ -90,83 +91,80 @@ public enum EmbeddedTldrCorpus {
       throw TldrCorpusError.resourceMissing
     }
     let gzData = try Data(contentsOf: url)
-    let jsonData: Data
-    if #available(macOS 10.15, iOS 13.0, *) {
-      // NSData / Data exposes `decompressed(using:)` on Apple platforms;
-      // .zlib expects raw deflate, so we use the gzip-compatible path
-      // via Compression framework wrapper.
-      jsonData = try gunzip(gzData)
-    } else {
-      throw TldrCorpusError.decompressionFailed
-    }
+    let jsonData = try gunzip(gzData)
     let decoder = JSONDecoder()
     return try decoder.decode(TldrCorpus.self, from: jsonData)
   }
 
-  /// Decompress a gzip stream. Foundation's NSData.decompressed(using:)
-  /// wants raw deflate, not gzip; we use the Compression framework to
-  /// handle the gzip header.
+  /// Decompress a gzip stream using libz. windowBits=47 (= MAX_WBITS + 32)
+  /// asks zlib to auto-detect the gzip header, so we don't have to parse
+  /// the FEXTRA / FNAME / FCOMMENT / FHCRC fields by hand.
+  ///
+  /// libz is universally available — macOS ships it in the SDK, every
+  /// Linux distro ships it as zlib1g, and the swiftlang/swift Docker
+  /// images include the dev headers. This is what lets the same code path
+  /// work on macOS and Linux; an earlier revision used Apple's
+  /// Compression.framework, which is Darwin-only and broke Linux CI.
   private static func gunzip(_ gzData: Data) throws -> Data {
-    return try gzData.withUnsafeBytes { (raw: UnsafeRawBufferPointer) -> Data in
-      guard let src = raw.bindMemory(to: UInt8.self).baseAddress else {
-        throw TldrCorpusError.decompressionFailed
-      }
-      // Allocate a destination buffer. The corpus expands ~4.5×; size
-      // generously to avoid a second pass.
-      let cap = max(gzData.count * 8, 8 * 1024 * 1024)
-      let dst = UnsafeMutablePointer<UInt8>.allocate(capacity: cap)
-      defer { dst.deallocate() }
+    guard !gzData.isEmpty else { throw TldrCorpusError.decompressionFailed }
 
-      // COMPRESSION_ZLIB consumes raw deflate; we strip the gzip header
-      // (10 bytes) + footer (8 bytes) and feed the deflate stream.
-      // gzip header structure: 0x1f 0x8b 0x08 [flags] 4×mtime 1×xfl 1×os
-      guard gzData.count > 18,
-            gzData[0] == 0x1f, gzData[1] == 0x8b, gzData[2] == 0x08
-      else {
-        throw TldrCorpusError.decompressionFailed
-      }
-      let flags = gzData[3]
-      var headerLen = 10
-      // FEXTRA (bit 2): 2-byte length + payload
-      if flags & 0x04 != 0 {
-        guard gzData.count > headerLen + 2 else { throw TldrCorpusError.decompressionFailed }
-        let xlen = Int(gzData[headerLen]) | (Int(gzData[headerLen + 1]) << 8)
-        headerLen += 2 + xlen
-      }
-      // FNAME (bit 3) and FCOMMENT (bit 4): null-terminated strings
-      if flags & 0x08 != 0 {
-        while headerLen < gzData.count, gzData[headerLen] != 0 { headerLen += 1 }
-        headerLen += 1
-      }
-      if flags & 0x10 != 0 {
-        while headerLen < gzData.count, gzData[headerLen] != 0 { headerLen += 1 }
-        headerLen += 1
-      }
-      // FHCRC (bit 1): 2-byte header CRC
-      if flags & 0x02 != 0 { headerLen += 2 }
-      let footerLen = 8
-      guard headerLen + footerLen < gzData.count else {
-        throw TldrCorpusError.decompressionFailed
-      }
-      let deflateLen = gzData.count - headerLen - footerLen
-      let deflateStart = src.advanced(by: headerLen)
+    var output = Data()
+    var streamErr: Int32 = Z_OK
 
-      #if canImport(Compression)
-      let written = compression_decode_buffer(
-        dst, cap,
-        deflateStart, deflateLen,
-        nil,
-        COMPRESSION_ZLIB
+    gzData.withUnsafeBytes { (rawIn: UnsafeRawBufferPointer) in
+      guard let inBase = rawIn.bindMemory(to: UInt8.self).baseAddress else {
+        streamErr = Z_DATA_ERROR
+        return
+      }
+
+      var strm = z_stream()
+      strm.next_in = UnsafeMutablePointer(mutating: inBase)
+      strm.avail_in = UInt32(gzData.count)
+
+      // 47 = MAX_WBITS (15) + 32 → enable automatic zlib/gzip header detection.
+      // ZLIB_VERSION + sizeof(z_stream) match what the zlib headers expect;
+      // we go through inflateInit2_ since the inflateInit2 macro doesn't
+      // bridge to Swift.
+      let initResult = inflateInit2_(
+        &strm, 47,
+        ZLIB_VERSION,
+        Int32(MemoryLayout<z_stream>.size)
       )
-      guard written > 0 else { throw TldrCorpusError.decompressionFailed }
-      return Data(bytes: dst, count: written)
-      #else
-      throw TldrCorpusError.decompressionFailed
-      #endif
+      guard initResult == Z_OK else {
+        streamErr = initResult
+        return
+      }
+      defer { inflateEnd(&strm) }
+
+      // 256 KB chunks — the corpus expands to ~4.7 MB, so this is ~19
+      // inflate iterations. Larger chunks would reduce overhead but also
+      // grow the resident set; this is a fine middle.
+      let chunkSize = 256 * 1024
+      var chunk = [UInt8](repeating: 0, count: chunkSize)
+
+      while true {
+        let result: Int32 = chunk.withUnsafeMutableBufferPointer { buf in
+          strm.next_out = buf.baseAddress
+          strm.avail_out = UInt32(chunkSize)
+          return inflate(&strm, Z_NO_FLUSH)
+        }
+        let written = chunkSize - Int(strm.avail_out)
+        if written > 0 {
+          output.append(contentsOf: chunk[0..<written])
+        }
+        if result == Z_STREAM_END {
+          return
+        }
+        if result != Z_OK {
+          streamErr = result
+          return
+        }
+      }
     }
+
+    if streamErr != Z_OK {
+      throw TldrCorpusError.decompressionFailed
+    }
+    return output
   }
 }
-
-#if canImport(Compression)
-import Compression
-#endif

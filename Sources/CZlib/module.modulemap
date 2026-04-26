@@ -1,0 +1,10 @@
+// CZlib — system module wrapper around the host zlib (libz). Used by
+// ShellTalkDiscovery to decompress the embedded gzipped tldr-pages corpus
+// at runtime in a way that works on both macOS and Linux. macOS ships
+// zlib in the SDK; Linux distros ship it as zlib1g (header in zlib1g-dev,
+// pre-installed on the official swiftlang/swift Docker images).
+module CZlib [system] {
+  header "shim.h"
+  link "z"
+  export *
+}
