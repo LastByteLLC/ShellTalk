@@ -1,22 +1,27 @@
 # ShellTalk
----
 
 ![macOS](https://img.shields.io/badge/macOS-15_Sequoia-000000?logo=apple)
+![Linux](https://img.shields.io/badge/Linux-Ubuntu_24.04-FCC624?logo=linux&logoColor=black)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-![Swift](https://img.shields.io/badge/Swift-6.2-FA7343.svg)
+![Swift](https://img.shields.io/badge/Swift-6.0+-FA7343.svg)
 
 A deterministic CLI that converts natural language into shell commands.
 
-ShellTalk uses **Semantic Template Matching** (STM) to map **intent → command**. It discovers available commands, resolves BSD–GNU flag differences, and validates commands before execution.
-
-Inspired by [Hunch](https://github.com/es617/hunch), which uses an LLM-based approach.
+ShellTalk uses **Semantic Template Matching** (STM) to map intent → command, plus a **discovery layer** (V1.5) backed by an embedded [tldr-pages](https://tldr.sh) corpus for the long tail. Same query, same machine, same result — no LLM at runtime.
 
 ```bash
 $ shelltalk "find swift files modified today"
 > find . -name '*.swift' -type f -mtime -1
 
-$ shelltalk "replace foo with bar in config.yaml"
-! sed -i '' 's/foo/bar/g' config.yaml
+$ shelltalk "encode video.mov to h264 with crf 23"
+> ffmpeg -i video.mov -c:v libx264 -preset medium -crf 23 out.mp4
+
+$ shelltalk "verify cert.pem against ca.pem"
+> /opt/homebrew/opt/openssl@3/bin/openssl verify -CAfile ca.pem cert.pem
+
+$ shelltalk --explore "lazygit show all branches"
+~ lazygit
+  warning: Synthesized from tldr/lazygit.md@209d423b — verify before running.
 
 $ shelltalk --heal "wget https://example.com/file.tar.gz" --stderr "command not found: wget"
 Fixed: 'wget' not found. Using alternative: curl -LO
@@ -30,191 +35,123 @@ Requires Swift 6.0+.
 ```bash
 git clone https://github.com/LastByteLLC/ShellTalk.git
 cd ShellTalk
-make install    # builds release binary, copies to /usr/local/bin
-```
-
-Or build and run directly:
-
-```bash
-swift build -c release
-.build/release/shelltalk "your query"
+make install    # builds release, copies to /usr/local/bin
 ```
 
 ## Usage
 
-```bash
+```
 shelltalk <query>           Convert query to a shell command
 shelltalk -x <query>        Execute the generated command
 shelltalk --dry-run <query> Validate without executing
-shelltalk --debug <query>   Show match scores, entities, and timing
-shelltalk --alternatives <query>  Show top-5 ranked matches
+shelltalk --debug <query>   Show match scores, entities, timing
+shelltalk --alternatives    Show top-5 ranked matches
+shelltalk --explore <query> Force discovery (tldr) path; bypass built-ins
+shelltalk --no-discovery    Disable the discovery layer for this call
 shelltalk --profile         Show detected system profile
-shelltalk --heal <cmd>      Diagnose and suggest fixes for a failed command
+shelltalk --heal <cmd>      Diagnose and fix a failed command
 ```
 
-### Examples
-
-```bash
-# File operations
-shelltalk "find all .DS_Store files"
-shelltalk "list files larger than 100M"
-shelltalk "disk usage by directory"
-
-# Git
-shelltalk "show recent commits"
-shelltalk "switch to feature/auth"
-shelltalk "who changed main.swift"
-
-# Text processing
-shelltalk "search for TODO in files"
-shelltalk "count lines in Package.swift"
-shelltalk "replace http with https in config.yaml"
-
-# macOS
-shelltalk "take a screenshot of Firefox"
-shelltalk "copy output to clipboard"
-shelltalk "prevent mac from sleeping"
-
-# Execute directly
-shelltalk -x "show git status"
-
-# Validate before running
-shelltalk --dry-run "delete all log files"
-```
-
-### Debug mode
-
-```bash
-$ shelltalk --debug "take a screenshot of Firefox"
---- Debug ---
-Timing: init 260ms | entities 0.85ms | match 28ms | extract 0.15ms | resolve 0.03ms | validate 66ms | total 355ms
-Entities:
-  Firefox -> applicationName [target] (lexicon, 85%)
-Category: macos (score: 9.094)
-Template: screencapture_window (score: 10.897)
-Alternatives:
-  [1] macos/screencapture_window
-  [2] macos/screencapture
----
-> screencapture -w screenshot.png
-```
-
-### Command healing
-
-```bash
-# Diagnose a failed command
-shelltalk --heal "sed -i 's/old/new/g' file.txt" --stderr "invalid command code"
-# Fixed: macOS sed requires -i '' (empty string for backup suffix)
-# > sed -i '' 's/old/new/g' file.txt
-
-# Missing tool suggestion
-shelltalk --heal "wget https://example.com/file.tar.gz" --stderr "command not found: wget"
-# Fixed: 'wget' not found. Using alternative: curl -LO
-# > curl -LO https://example.com/file.tar.gz
-```
+Output marker: `>` for hand-written templates, `~` for synthesized commands. Auto-execute (`-x`) refuses synthesized commands unless `--force` is passed; copy and review before running.
 
 ## How it works
 
-ShellTalk is fully deterministic. Same query, same machine, same result.
-
-```bash
+```
 Query
-  -> Entity Recognition (regex, lexicon, preposition frames, NLTagger POS)
-  -> BM25 Category Match (12 categories)
-  -> BM25 + TF-IDF Template Match (255 templates, NLEmbedding rerank on macOS)
-  -> Slot Extraction (entity-aware + regex)
-  -> Platform Resolution (BSD/GNU, macOS/Linux)
-  -> Validation (bash -n, command existence, safety check)
-  -> Command
+  ↓ Entity recognition (regex, lexicon, preposition frames, NLTagger POS)
+  ↓ BM25 + TF-IDF template match (~500 built-in templates, 13 categories)
+  ↓ Slot extraction (entity-aware + regex + glob + shape synthesis)
+  ↓ Platform resolution (BSD/GNU, macOS/Linux, ImageMagick v6/v7, OpenSSL/LibreSSL)
+  ↓ ── if no confident match ──→ Discovery: tldr corpus (6,611 pages)
+  ↓ Validation (bash -n, command exists, safety, domain checks)
+  ↓ Command
 ```
 
-**Template matching** uses a hybrid BM25 + TF-IDF scoring pipeline:
+**Hybrid matcher**: BM25 ranks categories and templates by bag-of-words; TF-IDF cosine similarity boosts conceptual matches and injects candidates BM25 missed; on macOS, NLEmbedding reranks the top candidates semantically.
 
-1. **BM25** ranks categories and templates using bag-of-words term matching with length normalization (k1=1.2, b=0.75)
-2. **TF-IDF** computes cosine similarity in a continuous vector space using sublinear term frequency (1 + log(tf)) and smoothed IDF, then acts as a hybrid layer:
-   - **Boost**: if a BM25 candidate also scores > 0.15 in TF-IDF, its score is boosted
-   - **Inject**: candidates found only by TF-IDF (score > 0.3) are injected into the results, catching matches that require broader conceptual overlap (e.g., "build for production" matching "compile for release")
-3. **NLEmbedding** (macOS only) provides a final semantic rerank pass
+**Capability slots** auto-resolve cross-version differences: `{IM_CMD}` becomes `magick` (v7) or `convert` (v6); `{OPENSSL_CMD}` prefers Homebrew openssl@3 over LibreSSL on macOS; `{TAR_ZSTD_FLAG}` is `--zstd` on GNU tar, `-I zstd` on BSD tar. The `SystemProfile` mid-path probe detects flavors at startup.
 
-**Entity recognition** identifies files, apps, URLs, processes, and other entities in your query using four layers:
+**Validation pipeline** runs structural checks even on synthesized commands: `bash -n` syntax, command-existence, safety classifier, plus domain validators (file-overwrite warning, ffmpeg encoder availability, OpenSSL legacy-cipher-on-LibreSSL, ImageMagick HEIC/AVIF delegate). Multi-operation queries ("encode video then add watermark") are detected and surfaced as a hint rather than silently truncated.
 
-1. **Structural** (regex) -- paths, URLs, globs, IPs, sizes, env vars
-2. **Lexicon** -- installed applications, known commands, service names
-3. **Preposition frames** -- "in X" = location, "of X" = target, "to X" = destination
-4. **NLTagger POS** (macOS) -- noun extraction for entities missed by layers 1-3
+## Discovery layer (V1.5)
 
-**Platform slots** resolve command differences automatically:
+When the standard matcher returns no confident result, ShellTalk consults an embedded [tldr-pages](https://tldr.sh) corpus and synthesizes a command from the closest example. This grows the reachable tool set from ~500 built-in templates to ~6,600 tldr-derived examples — modern tools (`bun`, `deno`, `lazygit`, `helm`, `kubectx`, `rg`, `bat`, `eza`, `gh`, etc.) just work without anyone having to write a template.
 
-| Slot | macOS | Linux |
-| ------ | ------- | ------- |
-| `sed -i` | `sed -i ''` | `sed -i` |
-| `stat size` | `stat -f '%z'` | `stat -c '%s'` |
-| `clipboard` | `pbcopy` | `xclip -selection clipboard` |
-| `open` | `open` | `xdg-open` |
-| `pkg install` | `brew install` | `apt-get install` |
+| Metric | Value | Test floor |
+|---|---:|---:|
+| `tldr_roundtrip_acc` (n=662 sampled pages) | **0.9879** | 0.95 |
+| Within-page example ranking hit rate (n=200) | **0.9400** | 0.85 |
+
+Synthesized commands display with a `~` prefix and surface their tldr provenance:
+
+```bash
+$ shelltalk --explore "deno run a script"
+~ deno compile {{path/to/file.ts}}
+  warning: Synthesized from tldr/deno.md@209d423b — verify before running.
+```
+
+Disabled in WASM builds (no resource bundle) and on macOS/Linux when `SHELLTALK_DISCOVERY=off` or `--no-discovery` is set.
+
+**Refresh the corpus** before tagging a release:
+
+```bash
+./harness/refresh-tldr-baseline.sh    # shallow-clones tldr-pages, regenerates the embedded JSON
+```
+
+> tldr-pages content is licensed [CC-BY-4.0](https://github.com/tldr-pages/tldr/blob/main/LICENSE.md) by the tldr-pages contributors. ShellTalk embeds a snapshot; attribution is preserved in the binary and shown alongside synthesized output.
 
 ## Template categories
 
+13 categories, ~500 built-in templates as of v1.5:
+
 | Category | Templates | Examples |
-| ---------- | ----------- | --------- |
-| File Operations | 26 | find, ls, cp, mv, rm, mkdir, du, chmod |
-| Git | 33 | status, diff, log, commit, branch, merge, stash, blame, range |
+|---|---:|---|
+| File Operations | 26 | find, ls, cp, mv, rm, mkdir, du, chmod, chown |
+| Git | 33 | status, diff, log, commit, branch, merge, stash, blame |
 | Text Processing | 17 | grep, sed, awk, sort, uniq, wc, head, tail, jq, yq |
 | Dev Tools | 25 | swift, cargo, go, node, python, docker, kubectl |
 | macOS | 16 | open, pbcopy, say, defaults, mdfind, sips, screencapture |
-| Network | 12 | curl, ssh, scp, dig, ping |
+| Network | 33 | curl (PUT/PATCH/DELETE/auth/mTLS/cookies/forms), ssh, scp, dig |
 | System | 38 | ps, kill, df, env, which, uptime |
 | Packages | 12 | brew, npm, pip, cargo |
-| Compression | 12 | tar, gzip, zip, xz, zstd |
-| Cloud | 29 | aws s3/ec2/lambda, kubectl |
-| Media | 11 | ffmpeg, imagemagick, sips |
+| Compression | 26 | tar (xz/zst, exclude, strip-components, single-file), gzip, zip, xz, zstd |
+| Cloud | 29 | aws s3/ec2/lambda, kubectl, helm, wrangler, sam, serverless |
+| Media | 50+ | ffmpeg (h264/hevc/av1/concat/watermark/hls/...), imagemagick (crop/rotate/montage/...) |
 | Shell Scripting | 12 | for, while, if, subshells, heredocs |
+| **Crypto** *(v1.4)* | 30 | openssl (x509/csr/keys/aes/hmac/p12/sha256/...) |
 
 ## Cross-platform
 
-Builds and runs on macOS and Linux. On macOS, [`NLEmbedding`](https://developer.apple.com/documentation/naturallanguage/nlembedding) provides enhanced semantic matching. On Linux, BM25 + TF-IDF handles all matching with no external dependencies.
+Builds and runs on macOS, Linux, and WASM. On macOS, `NLEmbedding` provides semantic rerank. On Linux, BM25 + TF-IDF handles all matching with no external dependencies. The discovery layer (`ShellTalkDiscovery` target) ships only on macOS/Linux — WASM excludes it for binary size.
 
 ```bash
-# Linux build via Docker
+# Linux via Docker
 docker build -t shelltalk .
+
+# WASM (browser demo)
+make wasm
 ```
 
-## Meta-Harness
+## Quality + meta-harness
 
-Matching quality is improved by an agentic proposer loop — one Claude instance reads prior candidate traces in `harness/runs/`, proposes one change, evaluates it, and keeps only Pareto wins. Inspired by [Meta-Harness](https://arxiv.org/abs/2603.28052): causal reasoning emerges from reading many prior attempts, not from summaries.
+Matching quality is improved by an offline meta-harness loop: one Claude instance reads candidate traces in `harness/runs/`, proposes one overlay change, runs `stm-eval` against the curated 615-case corpus, and keeps only Pareto wins. Validated refinements graduate into `Sources/ShellTalkKit/Templates/TemplateRefinements.swift`. `harness/FINDINGS.md` carries forward durable methodology notes (F1–F12: Set iteration ordering, BM25 IDF perturbation, etc.).
 
-Each candidate is a branch + artifact dir containing an `overlay.yaml`, `metrics.json`, and `traces/eval.jsonl`. Overlays (see `harness/overlay-schema.md`) tweak matcher thresholds, per-template `discriminators`, `negativeKeywords`, or `addIntents` without touching source. Source edits are allowed only on candidate branches.
-
-Candidates are scored by `stm-eval` against 454 curated `EvalCase`s and gated by `swift test --filter STMAccuracy` — zero-regression, no exceptions. Validated refinements graduate into `Sources/ShellTalkKit/Templates/TemplateRefinements.swift`.
-
-Current shipped frontier (see `harness/frontier.md` for the full timeline):
-
-| state            | n   | tpl_acc | cat_acc | BM25 lane | p95_ms |
-| ---------------- | ---:| ------: | ------: | --------: | -----: |
-| shipped (main)   | 454 |  0.9780 |  0.9890 |     0.925 |    358 |
-| original baseline | 380 |  0.8947 |  0.9421 |     0.687 |   1038 |
-
-Net across all rounds: **+8.33pp tpl_acc**, **+4.69pp cat_acc**, **+23.8pp** on the BM25 ranking lane, **65% lower p95**. Eval set grew 380 → 454 cases (+74 from audit additions). 28 of 35 suites at 100%. Determinism restored (F1 in `harness/FINDINGS.md`). `harness/runs/` is gitignored — only the shipped state lives in source and `frontier.md` / `ROADMAP.md`.
+| State | n cases | tpl_acc | cat_acc | p95 ms |
+|---|---:|---:|---:|---:|
+| **v1.5 shipped** (main) | 615 | **0.9902** | **0.9967** | ~70 |
+| v1.4 (incant) | 615 | 0.9919 | 0.9967 | ~70 |
+| v1.3 baseline | 454 | 0.9780 | 0.9890 | 358 |
+| original baseline | 380 | 0.8947 | 0.9421 | 1038 |
 
 ```bash
-# Evaluate an overlay candidate
-swift build -c release --product stm-eval
-.build/release/stm-eval --quiet \
-  --overlay    harness/runs/<run>/<cand>/overlay.yaml \
-  --trace-out  harness/runs/<run>/<cand>/traces/eval.jsonl \
-  --metrics-out harness/runs/<run>/<cand>/metrics.json
-
-# Gate: curated STMAccuracy tests with overlay applied
-SHELLTALK_OVERLAY_PATH=<overlay> swift test --filter STMAccuracy
+swift test                                              # full suite (205 tests)
+.build/release/stm-eval --quiet --metrics-out out.json  # 615-case eval
 ```
 
-`harness/FINDINGS.md` carries forward durable methodology notes (F1–F12) — e.g. `Set` iteration must be sorted for deterministic ranking, and `discriminators` should be preferred over `addIntents` because the latter perturbs global BM25/TF-IDF statistics.
+## Acknowledgements
 
-## Testing
-
-```bash
-swift test
-```
+- Inspired by [Hunch](https://github.com/es617/hunch), which uses an LLM-based approach.
+- Discovery layer is backed by [tldr-pages](https://tldr.sh) (CC-BY-4.0).
 
 ## License
 
